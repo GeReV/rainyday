@@ -132,6 +132,12 @@ impl Program {
         }
     }
 
+    pub fn set_uniform_2f(&self, location: i32, value: &na::Vector2<f32>) {
+        unsafe {
+            self.gl.Uniform2f(location, value.x, value.y);
+        }
+    }
+
     pub fn set_uniform_1i(&self, location: i32, index: i32) {
         unsafe {
             self.gl.Uniform1i(location, index);

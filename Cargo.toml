@@ -1,0 +1,24 @@
+[package]
+name = "Rain"
+version = "0.1.0"
+authors = ["Amir Grozki <amirgrozki@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+sdl2 = { version = "0.32", features = ["bundled", "static-link"] }
+gl = { path = "lib/gl" }
+failure = "0.1"
+render_gl_derive = { path = "render_gl_derive" }
+vec-2-10-10-10 = "0.1.2"
+half = "1.4.0"
+nalgebra = "0.16"
+image = "0.20"
+
+
+[build-dependencies]
+walkdir = "2.1"
+
+[features]
+gl_debug = ["gl/debug"]

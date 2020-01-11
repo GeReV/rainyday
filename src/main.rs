@@ -14,6 +14,7 @@ pub mod render_gl;
 pub mod resources;
 
 use crate::debug::failure_to_string;
+use crate::quad::Quad;
 use failure::err_msg;
 use nalgebra as na;
 use render_gl::buffer;
@@ -78,8 +79,6 @@ fn run() -> Result<(), failure::Error> {
         0.01,
         1000.0,
     );
-
-    let quad = quad::Quad::new(&res, &gl)?;
 
     let background = background::Background::new(
         &res,

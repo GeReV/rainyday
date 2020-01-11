@@ -67,14 +67,14 @@ impl Resources {
     pub fn load_rgb_image(&self, resource_name: &str) -> Result<image::RgbImage, Error> {
         let img = image::open(resource_name_to_path(&self.root_path, resource_name))?;
 
-        Ok(img.to_rgb())
+        Ok(img.flipv().to_rgb())
     }
 
     pub fn load_rgba_image(&self, resource_name: &str) -> Result<image::RgbaImage, Error> {
         let img = image::open(resource_name_to_path(&self.root_path, resource_name))?;
 
         if let image::ColorType::RGBA(_) = img.color() {
-            Ok(img.to_rgba())
+            Ok(img.flipv().to_rgba())
         } else {
             Err(Error::ImageIsNotRgba {
                 name: resource_name.into(),

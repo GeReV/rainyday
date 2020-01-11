@@ -35,10 +35,10 @@ impl Quad {
         top: f32,
         right: f32,
     ) -> Result<Quad, failure::Error> {
-        let v0 = (bottom, left, 0.0);
-        let v1 = (top, left, 0.0);
-        let v2 = (bottom, right, 0.0);
-        let v3 = (top, right, 0.0);
+        let v0 = (left, bottom, 0.0);
+        let v1 = (left, top, 0.0);
+        let v2 = (right, bottom, 0.0);
+        let v3 = (right, top, 0.0);
 
         let white = (1.0, 1.0, 1.0, 1.0);
 
@@ -46,26 +46,26 @@ impl Quad {
             Vertex {
                 pos: v0.into(),
                 clr: white.into(),
-                uv: (0.0, 1.0).into(),
+                uv: (0.0, 0.0).into(),
             }, // 0
             Vertex {
                 pos: v1.into(),
                 clr: white.into(),
-                uv: (1.0, 1.0).into(),
+                uv: (0.0, 1.0).into(),
             }, // 1
             Vertex {
                 pos: v2.into(),
                 clr: white.into(),
-                uv: (0.0, 0.0).into(),
+                uv: (1.0, 0.0).into(),
             }, // 2
             Vertex {
                 pos: v3.into(),
                 clr: white.into(),
-                uv: (1.0, 0.0).into(),
+                uv: (1.0, 1.0).into(),
             }, // 3
         ];
 
-        let ebo_data: Vec<u8> = vec![0, 1, 2, 1, 3, 2];
+        let ebo_data: Vec<u8> = vec![0, 2, 1, 1, 2, 3];
 
         let vbo = buffer::ArrayBuffer::new(gl);
         vbo.bind();

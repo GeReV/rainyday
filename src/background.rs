@@ -5,17 +5,6 @@ use failure;
 use gl;
 use nalgebra as na;
 
-#[derive(VertexAttribPointers, Copy, Clone, Debug)]
-#[repr(C, packed)]
-struct Vertex {
-    #[location = "0"]
-    pos: data::f32_f32_f32,
-    #[location = "1"]
-    clr: data::f32_f32_f32_f32,
-    #[location = "2"]
-    uv: data::f32_f32,
-}
-
 pub struct Background {
     program: render_gl::Program,
     texture: render_gl::Texture,
@@ -34,7 +23,9 @@ impl Background {
         screen_height: u32,
     ) -> Result<Background, failure::Error> {
         // set up shader program
-        let texture = render_gl::Texture::from_res_rgb("textures/background.jpg").load(gl, res)?;
+        let texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
+            .with_gen_mipmaps()
+            .load(gl, res)?;
 
         let program = render_gl::Program::from_res(gl, res, "shaders/background")?;
 

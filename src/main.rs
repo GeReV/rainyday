@@ -5,10 +5,12 @@ extern crate failure;
 #[macro_use]
 extern crate render_gl_derive;
 extern crate nalgebra;
+extern crate rand;
 extern crate vec_2_10_10_10;
 
 mod background;
 mod debug;
+mod drop;
 mod quad;
 pub mod render_gl;
 pub mod resources;
@@ -17,6 +19,7 @@ use crate::debug::failure_to_string;
 use crate::quad::Quad;
 use failure::err_msg;
 use nalgebra as na;
+use rand::Rng;
 use render_gl::buffer;
 use render_gl::data;
 use resources::Resources;
@@ -87,6 +90,8 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
+    let drop = drop::Drop::new(&res, &gl)?;
+
     viewport.set_used(&gl);
 
     let color_buffer = render_gl::ColorBuffer::from_color(na::Vector3::new(0.3, 0.3, 0.5));
@@ -94,6 +99,21 @@ fn run() -> Result<(), failure::Error> {
     color_buffer.set_used(&gl);
 
     let mut event_pump = sdl.event_pump().map_err(err_msg)?;
+
+    let mut rng = rand::thread_rng();
+
+    let drop_models: Vec<na::Matrix4<f32>> = (0..100)
+        .map(|_| {
+            let x = rng.gen_range(100.0, 1820.0);
+            let y = rng.gen_range(100.0, 980.0);
+            let size = rng.gen_range(1.0, 10.0);
+
+            let model = na::Matrix4::<f32>::new_translation(&na::Vector3::new(x, y, 5.0))
+                * na::Matrix4::<f32>::new_scaling(size);
+
+            model
+        })
+        .collect();
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -115,19 +135,22 @@ fn run() -> Result<(), failure::Error> {
         }
 
         unsafe {
-            gl.Enable(gl::CULL_FACE);
-            gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            gl.Enable(gl::DEPTH_TEST);
+            //            gl.Enable(gl::CULL_FACE);
+            //            gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            //            gl.Enable(gl::DEPTH_TEST);
+            gl.Enable(gl::BLEND);
+            gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
         color_buffer.clear(&gl);
 
-        background.render(
-            &gl,
-            &view,
-            &projection.into_inner(),
-            &na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32),
-        );
+        let resolution = na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
+
+        background.render(&gl, &view, &projection.into_inner(), &resolution);
+
+        for model in &drop_models {
+            drop.render(&gl, model, &view, &projection.into_inner(), &resolution);
+        }
 
         window.gl_swap_window();
     }

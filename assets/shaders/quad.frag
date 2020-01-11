@@ -18,7 +18,6 @@ float normpdf(in float x, in float sigma)
 
 void main()
 {
-
     //declare stuff
     const int mSize = 13;
     const int kSize = (mSize-1) / 2;

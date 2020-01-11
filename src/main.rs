@@ -7,7 +7,7 @@ extern crate render_gl_derive;
 extern crate nalgebra;
 extern crate vec_2_10_10_10;
 
-mod cube;
+mod background;
 mod debug;
 mod quad;
 pub mod render_gl;
@@ -22,15 +22,6 @@ use resources::Resources;
 use sdl2::init;
 use std::ffi::{CStr, CString};
 use std::path::Path;
-
-#[derive(VertexAttribPointers, Copy, Clone, Debug)]
-#[repr(C, packed)]
-struct Vertex {
-    #[location = "0"]
-    pos: data::f32_f32_f32,
-    #[location = "1"]
-    clr: data::u2_u10_u10_u10_rev_float,
-}
 
 fn main() {
     if let Err(e) = run() {
@@ -88,13 +79,13 @@ fn run() -> Result<(), failure::Error> {
         1000.0,
     );
 
-    let quad = quad::Quad::new_with_size(
+    let quad = quad::Quad::new(&res, &gl)?;
+
+    let background = background::Background::new(
         &res,
         &gl,
-        0.0,
-        0.0,
-        initial_window_size.0 as f32,
-        initial_window_size.1 as f32,
+        initial_window_size.0 as u32,
+        initial_window_size.1 as u32,
     )?;
 
     viewport.set_used(&gl);
@@ -132,7 +123,7 @@ fn run() -> Result<(), failure::Error> {
 
         color_buffer.clear(&gl);
 
-        quad.render(
+        background.render(
             &gl,
             &view,
             &projection.into_inner(),

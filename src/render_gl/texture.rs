@@ -1,6 +1,6 @@
+use crate::resources::Resources;
 use failure;
 use gl;
-use crate::resources::Resources;
 use std::os::raw;
 
 pub struct TextureLoadOptions<'a> {
@@ -45,6 +45,8 @@ impl<'a> TextureLoadBuilder<'a> {
 pub struct Texture {
     gl: gl::Gl,
     obj: gl::types::GLuint,
+    width: u32,
+    height: u32,
 }
 
 impl Drop for Texture {
@@ -76,9 +78,11 @@ impl Texture {
             gl.GenTextures(1, &mut obj);
         }
 
-        let texture = Texture {
+        let mut texture = Texture {
             gl: gl.clone(),
             obj,
+            width: 0,
+            height: 0,
         };
 
         texture.update(options, res)?;
@@ -87,7 +91,7 @@ impl Texture {
     }
 
     pub fn update<'a>(
-        &self,
+        &mut self,
         options: TextureLoadOptions<'a>,
         res: &Resources,
     ) -> Result<(), failure::Error> {
@@ -102,6 +106,11 @@ impl Texture {
         match options.format {
             gl::RGB => {
                 let img = res.load_rgb_image(options.resource_name)?;
+
+                let dims = img.dimensions();
+
+                self.width = dims.0;
+                self.height = dims.1;
 
                 if options.gen_mipmaps {
                     unsafe {
@@ -138,6 +147,11 @@ impl Texture {
             }
             gl::RGBA => {
                 let img = res.load_rgba_image(options.resource_name)?;
+
+                let dims = img.dimensions();
+
+                self.width = dims.0;
+                self.height = dims.1;
 
                 if options.gen_mipmaps {
                     unsafe {
@@ -199,5 +213,9 @@ impl Texture {
             self.gl.ActiveTexture(gl::TEXTURE0 + index);
         }
         self.bind();
+    }
+
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 }

@@ -23,9 +23,7 @@ impl Background {
         screen_height: u32,
     ) -> Result<Background, failure::Error> {
         // set up shader program
-        let texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
-            .with_gen_mipmaps()
-            .load(gl, res)?;
+        let texture = render_gl::Texture::from_res_rgb("textures/background.jpg").load(gl, res)?;
 
         let program = render_gl::Program::from_res(gl, res, "shaders/background")?;
 
@@ -57,7 +55,7 @@ impl Background {
         let top = target_dimensions.1 - offsets.1;
         let right = target_dimensions.0 - offsets.0;
 
-        let quad = quad::Quad::new_with_size(res, gl, bottom, left, top, right)?;
+        let quad = quad::Quad::new_with_size(gl, bottom, left, top, right)?;
 
         Ok(Background {
             texture,

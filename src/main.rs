@@ -152,6 +152,15 @@ fn run() -> Result<(), failure::Error> {
             drop.render(&gl, model, &view, &projection.into_inner(), &resolution);
         }
 
+        //        let size: f32 = 80.0;
+        //        let model = na::Matrix4::<f32>::new_translation(&na::Vector3::new(
+        //            viewport.w as f32 / 2.0 - size,
+        //            viewport.h as f32 / 2.0 - size,
+        //            5.0,
+        //        )) * na::Matrix4::new_scaling(size);
+        //
+        //        drop.render(&gl, &model, &view, &projection.into_inner(), &resolution);
+
         window.gl_swap_window();
     }
 

@@ -23,12 +23,11 @@ pub struct Quad {
 }
 
 impl Quad {
-    pub fn new(res: &Resources, gl: &gl::Gl) -> Result<Quad, failure::Error> {
-        Quad::new_with_size(res, gl, -1.0, -1.0, 1.0, 1.0)
+    pub fn new(gl: &gl::Gl) -> Result<Quad, failure::Error> {
+        Quad::new_with_size(gl, -1.0, -1.0, 1.0, 1.0)
     }
 
     pub fn new_with_size(
-        res: &Resources,
         gl: &gl::Gl,
         bottom: f32,
         left: f32,

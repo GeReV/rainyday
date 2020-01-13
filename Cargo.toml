@@ -16,7 +16,7 @@ half = "1.4.0"
 nalgebra = "0.16"
 image = "0.20"
 rand = "0.7.3"
-
+rand_distr = "0.2.2"
 
 [build-dependencies]
 walkdir = "2.1"

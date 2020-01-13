@@ -13,6 +13,7 @@ pub struct Drop {
     program_projection_location: Option<i32>,
     texture_location: Option<i32>,
     resolution_location: Option<i32>,
+    center_position_location: Option<i32>,
     quad: quad::Quad,
 }
 
@@ -30,6 +31,7 @@ impl Drop {
         let program_projection_location = program.get_uniform_location("Projection");
         let texture_location = program.get_uniform_location("Texture");
         let resolution_location = program.get_uniform_location("Resolution");
+        let center_position_location = program.get_uniform_location("CenterPosition");
 
         let quad = quad::Quad::new(gl)?;
 
@@ -41,6 +43,7 @@ impl Drop {
             program_projection_location,
             texture_location,
             resolution_location,
+            center_position_location,
             quad,
         })
     }
@@ -52,6 +55,7 @@ impl Drop {
         view_matrix: &na::Matrix4<f32>,
         proj_matrix: &na::Matrix4<f32>,
         resolution: &na::Vector2<f32>,
+        center_position: &na::Vector3<f32>,
     ) {
         self.program.set_used();
 
@@ -62,6 +66,10 @@ impl Drop {
 
         if let Some(loc) = self.resolution_location {
             self.program.set_uniform_2f(loc, resolution);
+        }
+
+        if let Some(loc) = self.center_position_location {
+            self.program.set_uniform_3f(loc, center_position);
         }
 
         if let Some(loc) = self.program_model_location {

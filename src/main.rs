@@ -90,7 +90,7 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
-    let drop = drop::Drop::new(&res, &gl)?;
+    let droplet = drop::Drop::new(&res, &gl)?;
 
     viewport.set_used(&gl);
 
@@ -102,16 +102,14 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let drop_models: Vec<na::Matrix4<f32>> = (0..100)
+    let droplets: Vec<(f32, f32, f32)> = (0..600)
         .map(|_| {
-            let x = rng.gen_range(100.0, 1820.0);
-            let y = rng.gen_range(100.0, 980.0);
-            let size = rng.gen_range(1.0, 10.0);
+            let x = rng.gen_range(0.0, 1920.0);
+            let y = rng.gen_range(0.0, 1080.0);
 
-            let model = na::Matrix4::<f32>::new_translation(&na::Vector3::new(x, y, 5.0))
-                * na::Matrix4::<f32>::new_scaling(size);
+            let size = rng.gen_range(2.0, 8.0);
 
-            model
+            (x, y, size)
         })
         .collect();
 
@@ -128,7 +126,7 @@ fn run() -> Result<(), failure::Error> {
                     viewport.set_used(&gl);
 
                     projection.set_left_and_right(0.0, w as f32);
-                    projection.set_bottom_and_top(h as f32, 0.0);
+                    projection.set_bottom_and_top(0.0, h as f32);
                 }
                 _ => {}
             }
@@ -148,8 +146,20 @@ fn run() -> Result<(), failure::Error> {
 
         background.render(&gl, &view, &projection.into_inner(), &resolution);
 
-        for model in &drop_models {
-            drop.render(&gl, model, &view, &projection.into_inner(), &resolution);
+        for droplet_data in &droplets {
+            let translation = na::Vector3::new(droplet_data.0, droplet_data.1, 5.0);
+
+            let model = na::Matrix4::<f32>::new_translation(&translation)
+                * na::Matrix4::<f32>::new_scaling(droplet_data.2);
+
+            droplet.render(
+                &gl,
+                &model,
+                &view,
+                &projection.into_inner(),
+                &resolution,
+                &translation,
+            );
         }
 
         //        let size: f32 = 80.0;

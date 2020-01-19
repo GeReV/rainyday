@@ -26,6 +26,7 @@ use resources::Resources;
 use sdl2::init;
 use std::ffi::{CStr, CString};
 use std::path::Path;
+use std::rc::Rc;
 
 fn main() {
     if let Err(e) = run() {
@@ -83,14 +84,21 @@ fn run() -> Result<(), failure::Error> {
         1000.0,
     );
 
+    let texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
+        .with_gen_mipmaps()
+        .load(&gl, &res)?;
+
+    let texture_rc = Rc::<render_gl::Texture>::new(texture);
+
     let background = background::Background::new(
         &res,
         &gl,
+        texture_rc.clone(),
         initial_window_size.0 as u32,
         initial_window_size.1 as u32,
     )?;
 
-    let droplet = drop::Drop::new(&res, &gl)?;
+    let droplet = drop::Drop::new(&res, &gl, texture_rc.clone())?;
 
     viewport.set_used(&gl);
 

@@ -4,10 +4,11 @@ use crate::resources::Resources;
 use failure;
 use gl;
 use nalgebra as na;
+use std::rc::Rc;
 
 pub struct Background {
     program: render_gl::Program,
-    texture: render_gl::Texture,
+    texture: Rc<render_gl::Texture>,
     program_view_location: Option<i32>,
     program_projection_location: Option<i32>,
     texture_location: Option<i32>,
@@ -19,12 +20,11 @@ impl Background {
     pub fn new(
         res: &Resources,
         gl: &gl::Gl,
+        texture: Rc<render_gl::Texture>,
         screen_width: u32,
         screen_height: u32,
     ) -> Result<Background, failure::Error> {
         // set up shader program
-        let texture = render_gl::Texture::from_res_rgb("textures/background.jpg").load(gl, res)?;
-
         let program = render_gl::Program::from_res(gl, res, "shaders/background")?;
 
         let program_view_location = program.get_uniform_location("View");

@@ -20,8 +20,7 @@ void main()
 
     // TODO: Find a formula for this?
     const float scale = 40.0;
-
-    vec2 aspect_correction = vec2(Resolution.y / Resolution.x, 1.0);
+    const float correction = 0.8;
 
     vec2 screen_coord_01 = gl_FragCoord.xy / Resolution;
     vec2 center_coord_01 = CenterPosition.xy / Resolution;
@@ -30,6 +29,9 @@ void main()
     float lensing = pow(length(uv), power);
 
     vec2 target_uv = (screen_coord_01 - center_coord_01) * scale * lensing + center_coord_01;
+
+    // Offset to accommodate for texture edges.
+    target_uv = target_uv * correction + (1.0 - correction) * 0.5;
 
     vec3 color = texture(Texture, target_uv).rgb;
 

@@ -27,6 +27,7 @@ use sdl2::init;
 use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 fn main() {
     if let Err(e) = run() {
@@ -110,18 +111,31 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let droplets: Vec<(f32, f32, f32)> = (0..600)
+    let mut droplets: Vec<(f32, f32, f32, f32)> = (0..600)
         .map(|_| {
-            let x = rng.gen_range(0.0, 1920.0);
-            let y = rng.gen_range(0.0, 1080.0);
+            let x = rng.gen_range(0.0, viewport.w as f32);
+            let y = rng.gen_range(0.0, viewport.h as f32);
 
             let size = rng.gen_range(2.0, 8.0);
 
-            (x, y, size)
+            let speed = rng.gen_range(100.0, 900.0);
+
+            (x, y, size, speed)
         })
         .collect();
 
+    unsafe {
+        gl.Enable(gl::BLEND);
+        gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    }
+
+    let mut instant = Instant::now();
+
     'main: loop {
+        let now = Instant::now();
+        let delta = now.duration_since(instant);
+        instant = now;
+
         for event in event_pump.poll_iter() {
             match event {
                 sdl2::event::Event::Quit { .. } => break 'main,
@@ -140,12 +154,12 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
-        unsafe {
-            //            gl.Enable(gl::CULL_FACE);
-            //            gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            //            gl.Enable(gl::DEPTH_TEST);
-            gl.Enable(gl::BLEND);
-            gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        for droplet_data in &mut droplets {
+            droplet_data.1 -= droplet_data.3 * delta.as_secs_f32();
+
+            if droplet_data.1 < -2.0 * droplet_data.2 {
+                droplet_data.1 = viewport.h as f32 + 2.0 * droplet_data.2;
+            }
         }
 
         color_buffer.clear(&gl);

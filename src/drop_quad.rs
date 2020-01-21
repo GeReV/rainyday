@@ -6,7 +6,7 @@ use gl;
 use nalgebra as na;
 use std::rc::Rc;
 
-pub struct Drop {
+pub struct DropQuad {
     program: render_gl::Program,
     texture: Rc<render_gl::Texture>,
     program_model_location: Option<i32>,
@@ -18,12 +18,12 @@ pub struct Drop {
     quad: quad::Quad,
 }
 
-impl Drop {
+impl DropQuad {
     pub fn new(
         res: &Resources,
         gl: &gl::Gl,
         texture: Rc<render_gl::Texture>,
-    ) -> Result<Drop, failure::Error> {
+    ) -> Result<DropQuad, failure::Error> {
         // set up shader program
         let program = render_gl::Program::from_res(gl, res, "shaders/drop")?;
 
@@ -36,7 +36,7 @@ impl Drop {
 
         let quad = quad::Quad::new(gl)?;
 
-        Ok(Drop {
+        Ok(DropQuad {
             texture,
             program,
             program_model_location,

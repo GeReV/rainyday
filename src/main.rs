@@ -10,12 +10,14 @@ extern crate vec_2_10_10_10;
 
 mod background;
 mod debug;
-mod drop;
+mod drop_quad;
+mod droplet;
 mod quad;
 pub mod render_gl;
 pub mod resources;
 
 use crate::debug::failure_to_string;
+use crate::droplet::Droplet;
 use crate::quad::Quad;
 use failure::err_msg;
 use nalgebra as na;
@@ -99,7 +101,7 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
-    let droplet = drop::Drop::new(&res, &gl, texture_rc.clone())?;
+    let droplet = drop_quad::DropQuad::new(&res, &gl, texture_rc.clone())?;
 
     viewport.set_used(&gl);
 
@@ -111,16 +113,24 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let mut droplets: Vec<(f32, f32, f32, f32)> = (0..600)
+    let mut droplets: Vec<Droplet> = (0..600)
         .map(|_| {
             let x = rng.gen_range(0.0, viewport.w as f32);
             let y = rng.gen_range(0.0, viewport.h as f32);
 
-            let size = rng.gen_range(2.0, 8.0);
+            let size = rng.gen_range(1.0, 5.0);
 
-            let speed = rng.gen_range(100.0, 900.0);
-
-            (x, y, size, speed)
+            Droplet {
+                x,
+                y,
+                size,
+                collided: false,
+                seed: 0,
+                skipping: false,
+                slowing: false,
+                x_speed: 0.0,
+                y_speed: 0.0,
+            }
         })
         .collect();
 
@@ -154,13 +164,7 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
-        for droplet_data in &mut droplets {
-            droplet_data.1 -= droplet_data.3 * delta.as_secs_f32();
-
-            if droplet_data.1 < -2.0 * droplet_data.2 {
-                droplet_data.1 = viewport.h as f32 + 2.0 * droplet_data.2;
-            }
-        }
+        gravity_non_linear(&mut droplets, &delta);
 
         color_buffer.clear(&gl);
 
@@ -169,10 +173,10 @@ fn run() -> Result<(), failure::Error> {
         background.render(&gl, &view, &projection.into_inner(), &resolution);
 
         for droplet_data in &droplets {
-            let translation = na::Vector3::new(droplet_data.0, droplet_data.1, 5.0);
+            let translation = na::Vector3::new(droplet_data.x, droplet_data.y, 5.0);
 
             let model = na::Matrix4::<f32>::new_translation(&translation)
-                * na::Matrix4::<f32>::new_scaling(droplet_data.2);
+                * na::Matrix4::<f32>::new_scaling(droplet_data.size);
 
             droplet.render(
                 &gl,
@@ -197,4 +201,55 @@ fn run() -> Result<(), failure::Error> {
     }
 
     Ok(())
+}
+
+const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.2;
+const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
+
+fn gravity_non_linear(droplets: &mut Vec<Droplet>, dt: &Duration) {
+    let mut rng = rand::thread_rng();
+
+    let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
+
+    for droplet in droplets {
+        if droplet.collided {
+            droplet.collided = false;
+            droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
+            droplet.skipping = false;
+            droplet.slowing = false;
+        } else if droplet.seed <= 0 {
+            droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
+            droplet.skipping = droplet.skipping == false;
+            droplet.slowing = true;
+        }
+
+        droplet.seed -= 1;
+
+        if droplet.y_speed > 0.0 {
+            if droplet.slowing {
+                droplet.y_speed *= 0.9;
+                droplet.x_speed *= 0.9;
+                if droplet.y_speed < gravity_y {
+                    droplet.slowing = false;
+                }
+            } else if droplet.skipping {
+                droplet.y_speed = gravity_y;
+                droplet.x_speed = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+            } else {
+                droplet.y_speed += gravity_y * droplet.size;
+                droplet.x_speed += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
+            }
+        } else {
+            droplet.y_speed = gravity_y;
+            droplet.x_speed = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+        }
+
+        //        if this.options.gravityAngleVariance != 0 {
+        //            droplet.x_speed +=
+        //                (rnd.gen() * 2 - 1) * droplet.y_speed * this.options.gravityAngleVariance
+        //        }
+
+        droplet.y -= droplet.y_speed;
+        droplet.x += droplet.x_speed;
+    }
 }

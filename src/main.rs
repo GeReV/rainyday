@@ -18,15 +18,10 @@ pub mod resources;
 
 use crate::debug::failure_to_string;
 use crate::droplet::Droplet;
-use crate::quad::Quad;
 use failure::err_msg;
 use nalgebra as na;
 use rand::Rng;
-use render_gl::buffer;
-use render_gl::data;
 use resources::Resources;
-use sdl2::init;
-use std::ffi::{CStr, CString};
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};

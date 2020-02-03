@@ -56,6 +56,56 @@ impl Drop for Texture {
 }
 
 impl Texture {
+    pub fn new(gl: &gl::Gl, width: u32, height: u32) -> Result<Texture, failure::Error> {
+        let mut obj: gl::types::GLuint = 0;
+        unsafe {
+            gl.GenTextures(1, &mut obj);
+        }
+
+        let texture = Texture {
+            gl: gl.clone(),
+            obj,
+            width,
+            height,
+        };
+
+        unsafe {
+            gl.BindTexture(gl::TEXTURE_2D, obj);
+        }
+
+        unsafe {
+            gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_BASE_LEVEL, 0);
+            gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
+            //            gl.TexParameteri(
+            //                gl::TEXTURE_2D,
+            //                gl::TEXTURE_MIN_FILTER,
+            //                gl::LINEAR.try_into().unwrap(),
+            //            );
+            //            gl.TexParameteri(
+            //                gl::TEXTURE_2D,
+            //                gl::TEXTURE_MAG_FILTER,
+            //                gl::LINEAR.try_into().unwrap(),
+            //            );
+            gl.TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA8 as gl::types::GLint,
+                width as i32,
+                height as i32,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                0 as *const raw::c_void,
+            );
+        }
+
+        unsafe {
+            gl.BindTexture(gl::TEXTURE_2D, 0);
+        }
+
+        Ok(texture)
+    }
+
     pub fn from_res_rgb(resource_name: &str) -> TextureLoadBuilder {
         TextureLoadBuilder {
             options: TextureLoadOptions::from_res_rgb(resource_name),
@@ -217,5 +267,9 @@ impl Texture {
 
     pub fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    pub fn id(&self) -> gl::types::GLuint {
+        self.obj
     }
 }

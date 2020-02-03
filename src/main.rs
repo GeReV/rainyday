@@ -88,6 +88,24 @@ fn run() -> Result<(), failure::Error> {
 
     let texture_rc = Rc::<render_gl::Texture>::new(texture);
 
+    let texture_buffer = render_gl::Texture::new(
+        &gl,
+        initial_window_size.0 as u32,
+        initial_window_size.1 as u32,
+    )?;
+
+    let frame_buffer = render_gl::FrameBuffer::new(&gl);
+
+    frame_buffer.bind();
+    frame_buffer.attach_texture(&texture_buffer);
+
+    let color_buffer2 = render_gl::ColorBuffer::from_color(na::Vector3::new(0.5, 0.6, 0.8));
+
+    color_buffer2.set_used(&gl);
+    color_buffer2.clear(&gl);
+
+    frame_buffer.unbind();
+
     let background = background::Background::new(
         &res,
         &gl,

@@ -89,7 +89,7 @@ impl Texture {
             gl.TexImage2D(
                 gl::TEXTURE_2D,
                 0,
-                gl::RGBA8 as gl::types::GLint,
+                gl::RGBA16 as gl::types::GLint,
                 width as i32,
                 height as i32,
                 0,

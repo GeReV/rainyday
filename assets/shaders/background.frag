@@ -1,7 +1,12 @@
 ﻿﻿﻿﻿#version 330 core
 
-uniform sampler2D Texture;
+uniform sampler2D TextureR;
+uniform sampler2D TextureG;
+uniform sampler2D TextureB;
 uniform vec2 Resolution;
+uniform vec4[17] Kernel0;
+uniform vec4[17] Kernel1;
+uniform float FilterRadius;
 
 in VS_OUTPUT {
     vec3 Position;
@@ -11,43 +16,49 @@ in VS_OUTPUT {
 
 out vec4 Color;
 
-float normpdf(in float x, in float sigma)
+const int KERNEL_RADIUS = 8;
+
+const vec2 Kernel0Weights_RealX_ImY = vec2(0.411259, -0.548794);
+const vec2 Kernel1Weights_RealX_ImY = vec2(0.513282, 4.561110);
+
+//(Pr+Pi)*(Qr+Qi) = (Pr*Qr+Pr*Qi+Pi*Qr-Pi*Qi)
+vec2 multComplex(vec2 p, vec2 q)
 {
-    return 0.39894 * exp(-0.5 * x * x / (sigma * sigma)) / sigma;
+    return vec2(p.x*q.x-p.y*q.y, p.x*q.y+p.y*q.x);
 }
 
 void main()
 {
-    //declare stuff
-    const int mSize = 13;
-    const int kSize = (mSize-1) / 2;
+    vec2 stepVal = 1.0 / Resolution;
 
-    float kernel[mSize];
-    vec3 final_color = vec3(0.0);
+    vec4 valR = vec4(0, 0, 0, 0);
+    vec4 valG = vec4(0, 0, 0, 0);
+    vec4 valB = vec4(0, 0, 0, 0);
 
-    //create the 1-D kernel
-    float sigma = 7.0;
-    float Z = 0.0;
-
-    for (int j = 0; j <= kSize; ++j)
+    for (int i=-KERNEL_RADIUS; i <=KERNEL_RADIUS; ++i)
     {
-        kernel[kSize+j] = kernel[kSize-j] = normpdf(float(j), sigma);
+        vec2 coords = IN.Uv + stepVal * vec2(0.0, float(i)) * FilterRadius;
+        vec4 imageTexelR = texture(TextureR, coords);
+        vec4 imageTexelG = texture(TextureG, coords);
+        vec4 imageTexelB = texture(TextureB, coords);
+
+        int pixel = int(i + KERNEL_RADIUS);
+
+        vec4 c0_c1 = vec4(Kernel0[pixel].xy, Kernel1[pixel].xy);
+
+        valR.xy += multComplex(imageTexelR.xy, c0_c1.xy);
+        valR.zw += multComplex(imageTexelR.zw, c0_c1.zw);
+
+        valG.xy += multComplex(imageTexelG.xy, c0_c1.xy);
+        valG.zw += multComplex(imageTexelG.zw, c0_c1.zw);
+
+        valB.xy += multComplex(imageTexelB.xy, c0_c1.xy);
+        valB.zw += multComplex(imageTexelB.zw, c0_c1.zw);
     }
 
-    //get the normalization factor (as the gaussian has been clamped)
-    for (int j = 0; j < mSize; ++j)
-    {
-        Z += kernel[j];
-    }
+    float redChannel   = dot(valR.xy, Kernel0Weights_RealX_ImY)+dot(valR.zw, Kernel1Weights_RealX_ImY);
+    float greenChannel = dot(valG.xy, Kernel0Weights_RealX_ImY)+dot(valG.zw, Kernel1Weights_RealX_ImY);
+    float blueChannel  = dot(valB.xy, Kernel0Weights_RealX_ImY)+dot(valB.zw, Kernel1Weights_RealX_ImY);
 
-    //read out the texels
-    for (int i=-kSize; i <= kSize; ++i)
-    {
-        for (int j=-kSize; j <= kSize; ++j)
-        {
-            final_color += kernel[kSize+j] * kernel[kSize+i] * texture(Texture, IN.Uv + vec2(float(i), float(j)) / Resolution).rgb;
-        }
-    }
-
-    Color = vec4(final_color / (Z*Z), 1.0);
+    Color = vec4(vec3(redChannel, greenChannel, blueChannel), 1.0);
 }

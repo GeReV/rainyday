@@ -126,6 +126,20 @@ impl Program {
         }
     }
 
+    pub fn set_uniform_4fv(&self, location: i32, value: &[[f32; 4]]) {
+        unsafe {
+            self.gl
+                .Uniform4fv(location, value.len() as i32, value.as_ptr() as *const f32);
+        }
+    }
+
+    pub fn set_uniform_4f(&self, location: i32, value: &na::Vector4<f32>) {
+        unsafe {
+            self.gl
+                .Uniform4f(location, value.x, value.y, value.z, value.w);
+        }
+    }
+
     pub fn set_uniform_3f(&self, location: i32, value: &na::Vector3<f32>) {
         unsafe {
             self.gl.Uniform3f(location, value.x, value.y, value.z);

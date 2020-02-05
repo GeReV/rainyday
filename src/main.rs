@@ -183,7 +183,7 @@ fn run() -> Result<(), failure::Error> {
 
         let resolution = na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        background.render(&gl, &view, &projection.into_inner(), &resolution);
+        background.render(&gl, 1.0, &view, &projection.into_inner(), &resolution);
 
         for droplet_data in &droplets {
             let translation = na::Vector3::new(droplet_data.x, droplet_data.y, 5.0);

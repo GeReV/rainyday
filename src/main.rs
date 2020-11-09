@@ -6,7 +6,6 @@ extern crate failure;
 extern crate render_gl_derive;
 extern crate nalgebra;
 extern crate rand;
-extern crate vec_2_10_10_10;
 
 mod background;
 mod debug;
@@ -15,12 +14,18 @@ mod droplet;
 mod quad;
 pub mod render_gl;
 pub mod resources;
+mod vertex;
 
 use crate::debug::failure_to_string;
+use crate::drop_quad::DropQuad;
 use crate::droplet::Droplet;
+use crate::quad::Quad;
+use crate::render_gl::Program;
+use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
 use rand::Rng;
+use render_gl::buffer::*;
 use resources::Resources;
 use std::path::Path;
 use std::rc::Rc;
@@ -68,7 +73,7 @@ fn run() -> Result<(), failure::Error> {
 
     let distance = 10.0;
 
-    let view = (na::Translation3::<f32>::from(na::Point3::origin().coords)
+    let view: na::Matrix4<f32> = (na::Translation3::<f32>::from(na::Point3::origin().coords)
         * na::Translation3::<f32>::from(na::Vector3::z() * distance))
     .inverse()
     .to_homogeneous();
@@ -81,6 +86,8 @@ fn run() -> Result<(), failure::Error> {
         0.01,
         1000.0,
     );
+
+    let matrix = projection.into_inner() * view;
 
     let texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
         .with_gen_mipmaps()
@@ -114,7 +121,7 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
-    let droplet = drop_quad::DropQuad::new(&res, &gl, texture_rc.clone())?;
+    let quad = Quad::new(&gl)?;
 
     viewport.set_used(&gl);
 
@@ -126,12 +133,12 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let mut droplets: Vec<Droplet> = (0..600)
+    let mut droplets: Vec<Droplet> = (0..10000)
         .map(|_| {
             let x = rng.gen_range(0.0, viewport.w as f32);
             let y = rng.gen_range(0.0, viewport.h as f32);
 
-            let size = rng.gen_range(1.0, 5.0);
+            let size = rng.gen_range(1.5, 7.0);
 
             Droplet {
                 x,
@@ -153,6 +160,12 @@ fn run() -> Result<(), failure::Error> {
     }
 
     let mut instant = Instant::now();
+
+    let program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
+
+    let program_matrix_location = program.get_uniform_location("MVP");
+    let texture_location = program.get_uniform_location("Texture");
+    let resolution_location = program.get_uniform_location("Resolution");
 
     'main: loop {
         let now = Instant::now();
@@ -185,35 +198,72 @@ fn run() -> Result<(), failure::Error> {
 
         background.render(&gl, 1.0, &view, &projection.into_inner(), &resolution);
 
-        for droplet_data in &droplets {
-            let translation = na::Vector3::new(droplet_data.x, droplet_data.y, 5.0);
+        program.set_used();
 
-            let model = na::Matrix4::<f32>::new_translation(&translation)
-                * na::Matrix4::<f32>::new_scaling(droplet_data.size);
-
-            droplet.render(
-                &gl,
-                &model,
-                &view,
-                &projection.into_inner(),
-                &resolution,
-                &translation,
-            );
+        if let Some(loc) = resolution_location {
+            program.set_uniform_2f(loc, &resolution);
         }
 
-        //        let size: f32 = 80.0;
-        //        let model = na::Matrix4::<f32>::new_translation(&na::Vector3::new(
-        //            viewport.w as f32 / 2.0 - size,
-        //            viewport.h as f32 / 2.0 - size,
-        //            5.0,
-        //        )) * na::Matrix4::new_scaling(size);
-        //
-        //        drop.render(&gl, &model, &view, &projection.into_inner(), &resolution);
+        if let Some(loc) = program_matrix_location {
+            program.set_uniform_matrix_4fv(loc, &matrix);
+        }
+
+        if let Some(loc) = texture_location {
+            texture_rc.bind_at(0);
+            program.set_uniform_1i(loc, 0);
+        }
+
+        render_droplets(&gl, &program, &quad, &droplets);
 
         window.gl_swap_window();
     }
 
     Ok(())
+}
+
+fn render_droplets(gl: &gl::Gl, program: &Program, quad: &Quad, droplets: &Vec<Droplet>) {
+    quad.vao.bind();
+
+    let instance_vbo: ArrayBuffer = ArrayBuffer::new(&gl);
+    instance_vbo.bind();
+
+    let offsets: Vec<na::Vector3<f32>> = droplets
+        .iter()
+        .map(|d| na::Vector3::new(d.x, d.y, d.size))
+        .collect();
+
+    instance_vbo.static_draw_data(&offsets);
+
+    instance_vbo.unbind();
+
+    instance_vbo.bind();
+    unsafe {
+        gl.EnableVertexAttribArray(3);
+        gl.VertexAttribPointer(
+            3,
+            3,         // the number of components per generic vertex attribute
+            gl::FLOAT, // data type
+            gl::FALSE,
+            std::mem::size_of::<na::Vector3<f32>>() as gl::types::GLint,
+            0 as *const gl::types::GLvoid,
+        );
+    }
+    instance_vbo.unbind();
+
+    unsafe {
+        gl.VertexAttribDivisor(3, 1);
+    }
+
+    unsafe {
+        gl.DrawElementsInstanced(
+            gl::TRIANGLES,
+            6,
+            gl::UNSIGNED_BYTE,
+            ::std::ptr::null(),
+            droplets.len() as i32,
+        );
+    }
+    quad.vao.unbind();
 }
 
 const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.2;

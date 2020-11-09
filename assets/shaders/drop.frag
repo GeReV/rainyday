@@ -2,13 +2,12 @@
 
 uniform sampler2D Texture;
 uniform vec2 Resolution;
-uniform int Time;
-uniform vec3 CenterPosition;
 
 in VS_OUTPUT {
     vec3 Position;
     vec4 Color;
     vec2 Uv;
+    vec3 Offset;
 } IN;
 
 out vec4 Color;
@@ -23,7 +22,7 @@ void main()
     const float correction = 0.8;
 
     vec2 screen_coord_01 = gl_FragCoord.xy / Resolution;
-    vec2 center_coord_01 = CenterPosition.xy / Resolution;
+    vec2 center_coord_01 = IN.Offset.xy / Resolution;
 
     vec2 uv = (IN.Uv * 2.0 - 1.0);
     float lensing = pow(length(uv), power);

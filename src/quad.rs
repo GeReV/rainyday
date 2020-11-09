@@ -1,30 +1,20 @@
 ﻿use crate::render_gl::{self, buffer, data};
 use crate::resources::Resources;
+use crate::vertex::Vertex;
 use failure;
 use gl;
 use nalgebra as na;
-
-#[derive(VertexAttribPointers, Copy, Clone, Debug)]
-#[repr(C, packed)]
-struct Vertex {
-    #[location = "0"]
-    pos: data::f32_f32_f32,
-    #[location = "1"]
-    clr: data::f32_f32_f32_f32,
-    #[location = "2"]
-    uv: data::f32_f32,
-}
 
 pub struct Quad {
     _vbo: buffer::ArrayBuffer,
     _ebo: buffer::ElementArrayBuffer,
     index_count: i32,
-    vao: buffer::VertexArray,
+    pub vao: buffer::VertexArray,
 }
 
 impl Quad {
     pub fn new(gl: &gl::Gl) -> Result<Quad, failure::Error> {
-        Quad::new_with_size(gl, -1.0, -1.0, 1.0, 1.0)
+        Quad::new_with_size(gl, -0.5, -0.5, 0.5, 0.5)
     }
 
     pub fn new_with_size(

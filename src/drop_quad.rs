@@ -15,7 +15,7 @@ pub struct DropQuad {
     texture_location: Option<i32>,
     resolution_location: Option<i32>,
     center_position_location: Option<i32>,
-    quad: quad::Quad,
+    pub quad: quad::Quad,
 }
 
 impl DropQuad {

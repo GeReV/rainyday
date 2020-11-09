@@ -20,7 +20,7 @@ use crate::debug::failure_to_string;
 use crate::drop_quad::DropQuad;
 use crate::droplet::Droplet;
 use crate::quad::Quad;
-use crate::render_gl::Program;
+use crate::render_gl::{Program, Texture};
 use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
@@ -73,10 +73,11 @@ fn run() -> Result<(), failure::Error> {
 
     let distance = 10.0;
 
-    let view: na::Matrix4<f32> = (na::Translation3::<f32>::from(na::Point3::origin().coords)
-        * na::Translation3::<f32>::from(na::Vector3::z() * distance))
-    .inverse()
-    .to_homogeneous();
+    let view: na::Matrix4<f32> =
+        (na::Translation3::<f32>::from(na::Point3::origin().coords.into())
+            * na::Translation3::<f32>::from(na::Vector3::z() * distance))
+        .inverse()
+        .to_homogeneous();
 
     let mut projection = na::Orthographic3::new(
         0.0,
@@ -163,10 +164,6 @@ fn run() -> Result<(), failure::Error> {
 
     let program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
 
-    let program_matrix_location = program.get_uniform_location("MVP");
-    let texture_location = program.get_uniform_location("Texture");
-    let resolution_location = program.get_uniform_location("Resolution");
-
     'main: loop {
         let now = Instant::now();
         let delta = now.duration_since(instant);
@@ -190,30 +187,24 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
+        let resolution: na::Vector2<f32> =
+            na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
+
         gravity_non_linear(&mut droplets, &delta);
 
         color_buffer.clear(&gl);
 
-        let resolution = na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
+        background.render(&gl, 1.0, &view, &matrix, &resolution);
 
-        background.render(&gl, 1.0, &view, &projection.into_inner(), &resolution);
-
-        program.set_used();
-
-        if let Some(loc) = resolution_location {
-            program.set_uniform_2f(loc, &resolution);
-        }
-
-        if let Some(loc) = program_matrix_location {
-            program.set_uniform_matrix_4fv(loc, &matrix);
-        }
-
-        if let Some(loc) = texture_location {
-            texture_rc.bind_at(0);
-            program.set_uniform_1i(loc, 0);
-        }
-
-        render_droplets(&gl, &program, &quad, &droplets);
+        render_droplets(
+            &gl,
+            &program,
+            &matrix,
+            &resolution,
+            texture_rc.clone(),
+            &quad,
+            &droplets,
+        );
 
         window.gl_swap_window();
     }
@@ -221,7 +212,34 @@ fn run() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn render_droplets(gl: &gl::Gl, program: &Program, quad: &Quad, droplets: &Vec<Droplet>) {
+fn render_droplets(
+    gl: &gl::Gl,
+    program: &Program,
+    matrix: &na::Matrix4<f32>,
+    resolution: &na::Vector2<f32>,
+    texture: Rc<Texture>,
+    quad: &Quad,
+    droplets: &Vec<Droplet>,
+) {
+    let program_matrix_location = program.get_uniform_location("MVP");
+    let texture_location = program.get_uniform_location("Texture");
+    let resolution_location = program.get_uniform_location("Resolution");
+
+    program.set_used();
+
+    if let Some(loc) = resolution_location {
+        program.set_uniform_2f(loc, &resolution);
+    }
+
+    if let Some(loc) = program_matrix_location {
+        program.set_uniform_matrix_4fv(loc, &matrix);
+    }
+
+    if let Some(loc) = texture_location {
+        texture.bind_at(0);
+        program.set_uniform_1i(loc, 0);
+    }
+
     quad.vao.bind();
 
     let instance_vbo: ArrayBuffer = ArrayBuffer::new(&gl);

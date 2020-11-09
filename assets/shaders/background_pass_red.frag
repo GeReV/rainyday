@@ -1,4 +1,4 @@
-﻿﻿﻿﻿#version 330 core
+﻿#version 330 core
 
 uniform sampler2D Texture;
 uniform vec2 Resolution;

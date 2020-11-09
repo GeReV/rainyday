@@ -11,8 +11,6 @@ sdl2 = { version = "0.32", features = ["bundled", "static-link"] }
 gl = { path = "lib/gl" }
 failure = "0.1"
 render_gl_derive = { path = "render_gl_derive" }
-vec-2-10-10-10 = "0.1.2"
-half = "1.4.0"
 nalgebra = "0.16"
 image = "0.20"
 rand = "0.7.3"

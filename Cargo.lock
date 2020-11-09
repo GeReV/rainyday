@@ -301,12 +301,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "half"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ff54597ea139063f4225f1ec47011b03c9de4a486957ff3fc506881dac951d0"
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -589,14 +583,12 @@ version = "0.1.0"
 dependencies = [
  "failure",
  "gl",
- "half",
  "image",
  "nalgebra",
  "rand 0.7.3",
  "rand_distr",
  "render_gl_derive",
  "sdl2",
- "vec-2-10-10-10",
  "walkdir",
 ]
 
@@ -1040,12 +1032,6 @@ dependencies = [
  "lazy_static",
  "regex",
 ]
-
-[[package]]
-name = "vec-2-10-10-10"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ef3c4d87f97be129e5e240a49efd7d129a965e5b6acdf8364725b0a894138be"
 
 [[package]]
 name = "walkdir"

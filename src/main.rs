@@ -30,9 +30,11 @@ use ncollide2d as nc;
 use ncollide2d::bounding_volume::BoundingSphere;
 use ncollide2d::broad_phase::{BroadPhase, DBVTBroadPhase};
 use ncollide2d::pipeline::{
-    default_narrow_phase, CollisionGroups, CollisionObject, CollisionObjectSlabHandle,
-    CollisionWorld, ContactEvent, GeometricQueryType,
+    default_narrow_phase, BallBallManifoldGenerator, BallBallProximityDetector, CollisionGroups,
+    CollisionObject, CollisionObjectSlabHandle, CollisionWorld, ContactEvent, GeometricQueryType,
+    NarrowPhase,
 };
+use ncollide2d::query::Proximity;
 use ncollide2d::shape::{Ball, ShapeHandle};
 use rand::Rng;
 use render_gl::buffer::*;
@@ -167,10 +169,10 @@ fn run() -> Result<(), failure::Error> {
         })
         .collect();
 
-    let mut world = CollisionWorld::new(0.2);
+    let mut world = CollisionWorld::new(2.0);
 
     let collision_group = CollisionGroups::new();
-    let contacts_query = GeometricQueryType::Contacts(0.0, 0.0);
+    let contacts_query = GeometricQueryType::Proximity(0.0);
 
     let mut collision_handles = Vec::with_capacity(droplets.len());
 
@@ -231,11 +233,11 @@ fn run() -> Result<(), failure::Error> {
 
         updates.clear();
 
-        for ev in world.contact_events().iter().collect::<Vec<_>>() {
-            if let ContactEvent::Started(handle1, handle2) = ev {
+        for ev in world.proximity_events().iter().collect::<Vec<_>>() {
+            if ev.new_status == Proximity::Intersecting {
                 if let (Some(obj1), Some(obj2)) = (
-                    world.collision_object(*handle1),
-                    world.collision_object(*handle2),
+                    world.collision_object(ev.collider1),
+                    world.collision_object(ev.collider2),
                 ) {
                     let sphere1 = obj1.shape().local_bounding_sphere();
                     let sphere2 = obj2.shape().local_bounding_sphere();
@@ -244,13 +246,13 @@ fn run() -> Result<(), failure::Error> {
                     let rad2 = sphere2.radius();
 
                     let pair = if rad1 > rad2 {
-                        (*handle1, *handle2)
+                        (ev.collider1, ev.collider2)
                     } else if rad1 < rad2 {
-                        (*handle2, *handle1)
+                        (ev.collider2, ev.collider1)
                     } else if sphere1.center().y > sphere2.center().y {
-                        (*handle1, *handle2)
+                        (ev.collider1, ev.collider2)
                     } else {
-                        (*handle2, *handle1)
+                        (ev.collider2, ev.collider1)
                     };
 
                     updates.push(pair);
@@ -344,9 +346,6 @@ fn render_droplets(
 
     instance_vbo.static_draw_data(&offsets);
 
-    instance_vbo.unbind();
-
-    instance_vbo.bind();
     unsafe {
         gl.EnableVertexAttribArray(3);
         gl.VertexAttribPointer(

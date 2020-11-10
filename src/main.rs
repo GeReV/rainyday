@@ -5,6 +5,7 @@ extern crate failure;
 #[macro_use]
 extern crate render_gl_derive;
 extern crate nalgebra;
+extern crate ncollide2d;
 extern crate rand;
 
 mod background;
@@ -24,12 +25,23 @@ use crate::render_gl::{Program, Texture};
 use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
+use nalgebra::{Isometry2, Point2};
+use ncollide2d as nc;
+use ncollide2d::bounding_volume::BoundingSphere;
+use ncollide2d::broad_phase::{BroadPhase, DBVTBroadPhase};
+use ncollide2d::pipeline::{
+    default_narrow_phase, CollisionGroups, CollisionObject, CollisionObjectSlabHandle,
+    CollisionWorld, ContactEvent, GeometricQueryType,
+};
+use ncollide2d::shape::{Ball, ShapeHandle};
 use rand::Rng;
 use render_gl::buffer::*;
 use resources::Resources;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
+
+const DROPLET_COUNT: u32 = 5_000;
 
 fn main() {
     if let Err(e) = run() {
@@ -73,11 +85,10 @@ fn run() -> Result<(), failure::Error> {
 
     let distance = 10.0;
 
-    let view: na::Matrix4<f32> =
-        (na::Translation3::<f32>::from(na::Point3::origin().coords.into())
-            * na::Translation3::<f32>::from(na::Vector3::z() * distance))
-        .inverse()
-        .to_homogeneous();
+    let view: na::Matrix4<f32> = (na::Translation3::<f32>::from(na::Point3::origin().coords)
+        * na::Translation3::<f32>::from(na::Vector3::z() * distance))
+    .inverse()
+    .to_homogeneous();
 
     let mut projection = na::Orthographic3::new(
         0.0,
@@ -134,7 +145,7 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let mut droplets: Vec<Droplet> = (0..10000)
+    let mut droplets: Vec<Droplet> = (0..DROPLET_COUNT)
         .map(|_| {
             let x = rng.gen_range(0.0, viewport.w as f32);
             let y = rng.gen_range(0.0, viewport.h as f32);
@@ -149,11 +160,35 @@ fn run() -> Result<(), failure::Error> {
                 seed: 0,
                 skipping: false,
                 slowing: false,
+                deleted: false,
                 x_speed: 0.0,
                 y_speed: 0.0,
             }
         })
         .collect();
+
+    let mut world = CollisionWorld::new(0.2);
+
+    let collision_group = CollisionGroups::new();
+    let contacts_query = GeometricQueryType::Contacts(0.0, 0.0);
+
+    let mut collision_handles = Vec::with_capacity(droplets.len());
+
+    for (i, d) in droplets.iter().enumerate() {
+        let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+
+        let handle = world
+            .add(
+                Isometry2::new(na::Vector2::new(d.x, d.y), na::zero()),
+                shape_handle,
+                collision_group,
+                contacts_query,
+                i,
+            )
+            .0;
+
+        collision_handles.push(handle);
+    }
 
     unsafe {
         gl.Enable(gl::BLEND);
@@ -163,6 +198,8 @@ fn run() -> Result<(), failure::Error> {
     let mut instant = Instant::now();
 
     let program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
+
+    let mut updates = Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new();
 
     'main: loop {
         let now = Instant::now();
@@ -190,7 +227,61 @@ fn run() -> Result<(), failure::Error> {
         let resolution: na::Vector2<f32> =
             na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        gravity_non_linear(&mut droplets, &delta);
+        gravity_non_linear(&mut droplets, &mut world, &collision_handles, &delta);
+
+        updates.clear();
+
+        for ev in world.contact_events().iter().collect::<Vec<_>>() {
+            if let ContactEvent::Started(handle1, handle2) = ev {
+                if let (Some(obj1), Some(obj2)) = (
+                    world.collision_object(*handle1),
+                    world.collision_object(*handle2),
+                ) {
+                    let sphere1 = obj1.shape().local_bounding_sphere();
+                    let sphere2 = obj2.shape().local_bounding_sphere();
+
+                    let rad1 = sphere1.radius();
+                    let rad2 = sphere2.radius();
+
+                    let pair = if rad1 > rad2 {
+                        (*handle1, *handle2)
+                    } else if rad1 < rad2 {
+                        (*handle2, *handle1)
+                    } else if sphere1.center().y > sphere2.center().y {
+                        (*handle1, *handle2)
+                    } else {
+                        (*handle2, *handle1)
+                    };
+
+                    updates.push(pair);
+                }
+            }
+        }
+
+        for (keep_handle, delete_handle) in updates.iter() {
+            if let (Some(keep), Some(delete)) =
+                world.collision_object_pair_mut(*keep_handle, *delete_handle)
+            {
+                let keep_droplet_index = *keep.data();
+                let delete_droplet_index = *delete.data();
+
+                let delete_droplet_size = droplets[delete_droplet_index].size;
+
+                let keep_droplet = &mut droplets[keep_droplet_index];
+
+                // TODO: How much does a droplet grow when is absorbs another?
+                keep_droplet.size += delete_droplet_size.cbrt() * 0.5;
+
+                keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size)));
+            }
+        }
+
+        for (_, delete_handle) in updates.iter() {
+            if let Some(delete) = world.collision_object(*delete_handle) {
+                droplets[*delete.data()].deleted = true;
+                world.remove(&[*delete_handle]);
+            }
+        }
 
         color_buffer.clear(&gl);
 
@@ -247,6 +338,7 @@ fn render_droplets(
 
     let offsets: Vec<na::Vector3<f32>> = droplets
         .iter()
+        .filter(|&d| !d.deleted)
         .map(|d| na::Vector3::new(d.x, d.y, d.size))
         .collect();
 
@@ -278,7 +370,7 @@ fn render_droplets(
             6,
             gl::UNSIGNED_BYTE,
             ::std::ptr::null(),
-            droplets.len() as i32,
+            offsets.len() as i32,
         );
     }
     quad.vao.unbind();
@@ -287,12 +379,23 @@ fn render_droplets(
 const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.2;
 const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
 
-fn gravity_non_linear(droplets: &mut Vec<Droplet>, dt: &Duration) {
+fn gravity_non_linear(
+    droplets: &mut Vec<Droplet>,
+    world: &mut CollisionWorld<f32, usize>,
+    collision_handles: &Vec<CollisionObjectSlabHandle>,
+    dt: &Duration,
+) {
     let mut rng = rand::thread_rng();
 
     let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
 
-    for droplet in droplets {
+    for i in 0..droplets.len() {
+        let droplet = &mut droplets[i];
+
+        if droplet.deleted {
+            continue;
+        }
+
         if droplet.collided {
             droplet.collided = false;
             droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
@@ -332,5 +435,18 @@ fn gravity_non_linear(droplets: &mut Vec<Droplet>, dt: &Duration) {
 
         droplet.y -= droplet.y_speed;
         droplet.x += droplet.x_speed;
+
+        if droplet.x_speed != 0.0 || droplet.y_speed != 0.0 {
+            let handle = collision_handles[i];
+
+            let object = world.get_mut(handle).unwrap();
+
+            object.set_position(Isometry2::new(
+                na::Vector2::new(droplet.x, droplet.y),
+                na::zero(),
+            ));
+        }
     }
+
+    world.update();
 }

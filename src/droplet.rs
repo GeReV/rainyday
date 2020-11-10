@@ -7,5 +7,6 @@
     pub seed: i32,
     pub collided: bool,
     pub skipping: bool,
+    pub deleted: bool,
     pub slowing: bool,
 }

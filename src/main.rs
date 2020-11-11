@@ -39,6 +39,7 @@ use ncollide2d::shape::{Ball, ShapeHandle};
 use rand::Rng;
 use render_gl::buffer::*;
 use resources::Resources;
+use std::collections::VecDeque;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -71,15 +72,25 @@ fn run() -> Result<(), failure::Error> {
             initial_window_size.0 as u32,
             initial_window_size.1 as u32,
         )
-        //        .fullscreen_desktop()
+        .position_centered() //        .fullscreen_desktop()
         .opengl()
         .resizable()
+        .allow_highdpi()
         .build()?;
 
     let _gl_context = window.gl_create_context().map_err(err_msg)?;
 
     let gl = gl::Gl::load_with(|s| {
         video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void
+    });
+
+    let mut imgui = imgui::Context::create();
+    imgui.set_ini_filename(None);
+
+    let mut imgui_sdl2 = imgui_sdl2::ImguiSdl2::new(&mut imgui, &window);
+
+    let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui, |s| {
+        video_subsystem.gl_get_proc_address(s) as _
     });
 
     let mut viewport =
@@ -173,12 +184,17 @@ fn run() -> Result<(), failure::Error> {
 
     let mut updates = Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new();
 
-    'main: loop {
-        let now = Instant::now();
-        let delta = now.duration_since(instant);
-        instant = now;
+    let mut opened = true;
 
+    let mut frames: VecDeque<f32> = VecDeque::with_capacity(100);
+
+    'main: loop {
         for event in event_pump.poll_iter() {
+            imgui_sdl2.handle_event(&mut imgui, &event);
+            if imgui_sdl2.ignore_event(&event) {
+                continue;
+            }
+
             match event {
                 sdl2::event::Event::Quit { .. } => break 'main,
                 sdl2::event::Event::KeyUp { .. } => break 'main,
@@ -196,10 +212,51 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
+        imgui_sdl2.prepare_frame(imgui.io_mut(), &window, &event_pump.mouse_state());
+
+        let now = Instant::now();
+        let delta = now.duration_since(instant);
+        instant = now;
+
+        imgui.io_mut().delta_time = delta.as_secs_f32();
+
+        let ui = imgui.frame();
+
+        {
+            let temp_frames = &mut frames;
+
+            if temp_frames.len() == 100 {
+                temp_frames.pop_front();
+            }
+            temp_frames.push_back(ui.io().framerate);
+        }
+
+        let w = imgui::Window::new(imgui::im_str!("FPS"))
+            .opened(&mut opened)
+            .position([20.0, 20.0], imgui::Condition::Appearing)
+            .always_auto_resize(true);
+        w.build(&ui, || {
+            let (head, tail) = frames.as_slices();
+
+            let mut values = head.to_vec();
+            values.extend_from_slice(tail);
+
+            ui.text(&imgui::im_str!(
+                "FPS: {:.1} ({:.1}ms)",
+                ui.io().framerate,
+                ui.io().delta_time * 1000.0
+            ));
+            imgui::PlotHistogram::new(&ui, imgui::im_str!(""), &values)
+                .scale_max(150.0)
+                .scale_min(0.0)
+                .graph_size([220.0, 60.0])
+                .build();
+        });
+
         let resolution: na::Vector2<f32> =
             na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        // gravity_non_linear(&mut droplets, &mut total_droplets, &mut world, &delta);
+        gravity_non_linear(&mut droplets, &mut total_droplets, &mut world, &delta);
 
         updates.clear();
 
@@ -210,7 +267,7 @@ fn run() -> Result<(), failure::Error> {
                     rng.gen_range(0.0, viewport.w as f32),
                     rng.gen_range(0.0, viewport.h as f32),
                 );
-                d.size = rng.gen_range(1.5, 5.0);
+                d.size = rng.gen_range(1.5, 7.0);
 
                 total_droplets += 1;
 
@@ -297,6 +354,9 @@ fn run() -> Result<(), failure::Error> {
             &quad,
             &droplets,
         );
+
+        imgui_sdl2.prepare_render(&ui, &window);
+        renderer.render(ui);
 
         window.gl_swap_window();
     }

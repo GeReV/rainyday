@@ -1,12 +1,30 @@
-﻿pub struct Droplet {
-    pub x: f32,
-    pub y: f32,
+﻿use nalgebra::Vector2;
+use ncollide2d::pipeline::CollisionObjectSlabHandle;
+
+pub struct Droplet {
+    pub pos: Vector2<f32>,
     pub size: f32,
-    pub x_speed: f32,
-    pub y_speed: f32,
+    pub speed: Vector2<f32>,
     pub seed: i32,
     pub collided: bool,
     pub skipping: bool,
     pub deleted: bool,
     pub slowing: bool,
+    pub collision_handle: CollisionObjectSlabHandle,
+}
+
+impl Droplet {
+    pub fn new() -> Droplet {
+        Droplet {
+            pos: Vector2::default(),
+            size: 1.0,
+            speed: Vector2::default(),
+            seed: 0,
+            collided: false,
+            skipping: false,
+            deleted: false,
+            slowing: false,
+            collision_handle: CollisionObjectSlabHandle(0),
+        }
+    }
 }

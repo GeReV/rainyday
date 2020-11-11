@@ -25,7 +25,7 @@ use crate::render_gl::{Program, Texture};
 use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
-use nalgebra::{Isometry2, Point2};
+use nalgebra::{Isometry2, Point2, Vector2};
 use ncollide2d as nc;
 use ncollide2d::bounding_volume::BoundingSphere;
 use ncollide2d::broad_phase::{BroadPhase, DBVTBroadPhase};
@@ -43,7 +43,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-const DROPLET_COUNT: u32 = 5_000;
+const MAX_DROPLET_COUNT: usize = 10_000;
 
 fn main() {
     if let Err(e) = run() {
@@ -147,25 +147,13 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let mut droplets: Vec<Droplet> = (0..DROPLET_COUNT)
+    let mut total_droplets: usize = 0;
+    let mut droplets: Vec<Droplet> = (0..MAX_DROPLET_COUNT)
         .map(|_| {
-            let x = rng.gen_range(0.0, viewport.w as f32);
-            let y = rng.gen_range(0.0, viewport.h as f32);
+            let mut d = Droplet::new();
+            d.deleted = true;
 
-            let size = rng.gen_range(1.5, 7.0);
-
-            Droplet {
-                x,
-                y,
-                size,
-                collided: false,
-                seed: 0,
-                skipping: false,
-                slowing: false,
-                deleted: false,
-                x_speed: 0.0,
-                y_speed: 0.0,
-            }
+            d
         })
         .collect();
 
@@ -173,24 +161,6 @@ fn run() -> Result<(), failure::Error> {
 
     let collision_group = CollisionGroups::new();
     let contacts_query = GeometricQueryType::Proximity(0.0);
-
-    let mut collision_handles = Vec::with_capacity(droplets.len());
-
-    for (i, d) in droplets.iter().enumerate() {
-        let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
-
-        let handle = world
-            .add(
-                Isometry2::new(na::Vector2::new(d.x, d.y), na::zero()),
-                shape_handle,
-                collision_group,
-                contacts_query,
-                i,
-            )
-            .0;
-
-        collision_handles.push(handle);
-    }
 
     unsafe {
         gl.Enable(gl::BLEND);
@@ -229,9 +199,36 @@ fn run() -> Result<(), failure::Error> {
         let resolution: na::Vector2<f32> =
             na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        gravity_non_linear(&mut droplets, &mut world, &collision_handles, &delta);
+        // gravity_non_linear(&mut droplets, &mut total_droplets, &mut world, &delta);
 
         updates.clear();
+
+        if total_droplets < MAX_DROPLET_COUNT {
+            if let Some((i, d)) = droplets.iter_mut().enumerate().find(|(_, d)| d.deleted) {
+                d.deleted = false;
+                d.pos = na::Vector2::new(
+                    rng.gen_range(0.0, viewport.w as f32),
+                    rng.gen_range(0.0, viewport.h as f32),
+                );
+                d.size = rng.gen_range(1.5, 5.0);
+
+                total_droplets += 1;
+
+                let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+
+                let handle = world
+                    .add(
+                        Isometry2::new(d.pos.clone_owned(), na::zero()),
+                        shape_handle,
+                        collision_group,
+                        contacts_query,
+                        i,
+                    )
+                    .0;
+
+                d.collision_handle = handle;
+            }
+        }
 
         for ev in world.proximity_events().iter().collect::<Vec<_>>() {
             if ev.new_status == Proximity::Intersecting {
@@ -282,6 +279,8 @@ fn run() -> Result<(), failure::Error> {
             if let Some(delete) = world.collision_object(*delete_handle) {
                 droplets[*delete.data()].deleted = true;
                 world.remove(&[*delete_handle]);
+
+                total_droplets -= 1;
             }
         }
 
@@ -341,7 +340,7 @@ fn render_droplets(
     let offsets: Vec<na::Vector3<f32>> = droplets
         .iter()
         .filter(|&d| !d.deleted)
-        .map(|d| na::Vector3::new(d.x, d.y, d.size))
+        .map(|d| na::Vector3::new(d.pos.x, d.pos.y, d.size))
         .collect();
 
     instance_vbo.static_draw_data(&offsets);
@@ -380,8 +379,8 @@ const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
 
 fn gravity_non_linear(
     droplets: &mut Vec<Droplet>,
+    total_droplets: &mut usize,
     world: &mut CollisionWorld<f32, usize>,
-    collision_handles: &Vec<CollisionObjectSlabHandle>,
     dt: &Duration,
 ) {
     let mut rng = rand::thread_rng();
@@ -408,23 +407,23 @@ fn gravity_non_linear(
 
         droplet.seed -= 1;
 
-        if droplet.y_speed > 0.0 {
+        if droplet.speed.y > 0.0 {
             if droplet.slowing {
-                droplet.y_speed *= 0.9;
-                droplet.x_speed *= 0.9;
-                if droplet.y_speed < gravity_y {
+                droplet.speed.y *= 0.9;
+                droplet.speed.x *= 0.9;
+                if droplet.speed.y < gravity_y {
                     droplet.slowing = false;
                 }
             } else if droplet.skipping {
-                droplet.y_speed = gravity_y;
-                droplet.x_speed = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+                droplet.speed.y = gravity_y;
+                droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
             } else {
-                droplet.y_speed += gravity_y * droplet.size;
-                droplet.x_speed += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
+                droplet.speed.y += gravity_y * droplet.size;
+                droplet.speed.x += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
             }
         } else {
-            droplet.y_speed = gravity_y;
-            droplet.x_speed = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+            droplet.speed.y = gravity_y;
+            droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
         }
 
         //        if this.options.gravityAngleVariance != 0 {
@@ -432,18 +431,25 @@ fn gravity_non_linear(
         //                (rnd.gen() * 2 - 1) * droplet.y_speed * this.options.gravityAngleVariance
         //        }
 
-        droplet.y -= droplet.y_speed;
-        droplet.x += droplet.x_speed;
+        droplet.pos.y -= droplet.speed.y;
+        droplet.pos.x += droplet.speed.x;
 
-        if droplet.x_speed != 0.0 || droplet.y_speed != 0.0 {
-            let handle = collision_handles[i];
+        if droplet.pos.y + droplet.size * 0.5 < 0.0 {
+            droplet.deleted = true;
+
+            world.remove(&[droplet.collision_handle]);
+
+            *total_droplets -= 1;
+
+            continue;
+        }
+
+        if droplet.speed.x != 0.0 || droplet.speed.y != 0.0 {
+            let handle = droplet.collision_handle;
 
             let object = world.get_mut(handle).unwrap();
 
-            object.set_position(Isometry2::new(
-                na::Vector2::new(droplet.x, droplet.y),
-                na::zero(),
-            ));
+            object.set_position(Isometry2::new(droplet.pos.clone_owned(), na::zero()));
         }
     }
 

@@ -36,5 +36,11 @@ void main()
 
     float opacity = smoothstep(0.0, 0.1, 1.0 - length(uv));
 
-    Color = vec4(color, opacity);
+    const float min_lightness = 0.2;
+    const float max_lightness = 1.2;
+    const float lightness_power = 3.0;
+    float lightness = mix(min_lightness, max_lightness, 1.0 - pow(length(uv), lightness_power));
+    // float lightness = 1.0;
+
+    Color = vec4(color * lightness, opacity);
 }

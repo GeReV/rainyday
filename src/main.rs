@@ -18,7 +18,6 @@ pub mod resources;
 mod vertex;
 
 use crate::debug::failure_to_string;
-use crate::drop_quad::DropQuad;
 use crate::droplet::Droplet;
 use crate::droplets::Droplets;
 use crate::quad::Quad;

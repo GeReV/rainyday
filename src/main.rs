@@ -458,7 +458,7 @@ fn gravity_non_linear(
                 droplet.speed.y += gravity_y * droplet.size;
                 droplet.speed.x += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
             }
-        } else {
+        } else if droplet.seed >= (95.0 * droplet.size) as i32 {
             droplet.speed.y = gravity_y;
             droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
         }

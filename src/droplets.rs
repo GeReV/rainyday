@@ -51,6 +51,10 @@ impl Droplets {
 
         self.unused.push_back(index);
     }
+
+    pub fn len(&self) -> usize {
+        self.droplets.len()
+    }
 }
 
 impl<'a> IntoIterator for &'a Droplets {

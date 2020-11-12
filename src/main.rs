@@ -428,66 +428,66 @@ fn gravity_non_linear(
 
     let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
 
-    let mut deleted: Vec<usize> = Vec::new();
+    for i in 0..droplets.len() {
+        let mut delete_index: Option<usize> = None;
 
-    for (i, droplet) in droplets.into_iter().enumerate() {
-        if droplet.deleted {
-            continue;
-        }
+        {
+            let droplet = &mut droplets[i];
 
-        if droplet.seed <= 0 {
-            droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
-            droplet.skipping = droplet.skipping == false;
-            droplet.slowing = true;
-        }
+            if droplet.deleted {
+                continue;
+            }
 
-        droplet.seed -= 1;
+            if droplet.seed <= 0 {
+                droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
+                droplet.skipping = droplet.skipping == false;
+                droplet.slowing = true;
+            }
 
-        if droplet.speed.y > 0.0 {
-            if droplet.slowing {
-                droplet.speed *= 0.9;
-                if droplet.speed.y < gravity_y {
-                    droplet.slowing = false;
+            droplet.seed -= 1;
+
+            if droplet.speed.y > 0.0 {
+                if droplet.slowing {
+                    droplet.speed *= 0.9;
+                    if droplet.speed.y < gravity_y {
+                        droplet.slowing = false;
+                    }
+                } else if droplet.skipping {
+                    droplet.speed.y = gravity_y;
+                    droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+                } else {
+                    droplet.speed.y += gravity_y * droplet.size;
+                    droplet.speed.x += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
                 }
-            } else if droplet.skipping {
+            } else if droplet.seed >= (95.0 * droplet.size) as i32 {
                 droplet.speed.y = gravity_y;
                 droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
-            } else {
-                droplet.speed.y += gravity_y * droplet.size;
-                droplet.speed.x += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
             }
-        } else if droplet.seed >= (95.0 * droplet.size) as i32 {
-            droplet.speed.y = gravity_y;
-            droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
+
+            //        if this.options.gravityAngleVariance != 0 {
+            //            droplet.x_speed +=
+            //                (rnd.gen() * 2 - 1) * droplet.y_speed * this.options.gravityAngleVariance
+            //        }
+
+            droplet.pos.y -= droplet.speed.y;
+            droplet.pos.x += droplet.speed.x;
+
+            if droplet.pos.y + droplet.size * 0.5 < 0.0 {
+                delete_index = Some(i);
+
+                world.remove(&[droplet.collision_handle]);
+            } else if droplet.speed.x != 0.0 || droplet.speed.y != 0.0 {
+                let handle = droplet.collision_handle;
+
+                let object = world.get_mut(handle).unwrap();
+
+                object.set_position(Isometry2::new(droplet.pos.clone_owned(), na::zero()));
+            }
         }
 
-        //        if this.options.gravityAngleVariance != 0 {
-        //            droplet.x_speed +=
-        //                (rnd.gen() * 2 - 1) * droplet.y_speed * this.options.gravityAngleVariance
-        //        }
-
-        droplet.pos.y -= droplet.speed.y;
-        droplet.pos.x += droplet.speed.x;
-
-        if droplet.pos.y + droplet.size * 0.5 < 0.0 {
-            deleted.push(i);
-
-            world.remove(&[droplet.collision_handle]);
-
-            continue;
+        if let Some(delete_index) = delete_index {
+            droplets.free(delete_index);
         }
-
-        if droplet.speed.x != 0.0 || droplet.speed.y != 0.0 {
-            let handle = droplet.collision_handle;
-
-            let object = world.get_mut(handle).unwrap();
-
-            object.set_position(Isometry2::new(droplet.pos.clone_owned(), na::zero()));
-        }
-    }
-
-    for i in deleted {
-        droplets.free(i);
     }
 
     world.update();

@@ -312,7 +312,7 @@ fn run() -> Result<(), failure::Error> {
                 // TODO: How much does a droplet grow when is absorbs another?
                 keep_droplet.size += delete_droplet_size.cbrt() * 0.5;
 
-                keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size)));
+                keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size * 0.5)));
             }
         }
 

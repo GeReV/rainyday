@@ -10,7 +10,6 @@ extern crate rand;
 
 mod background;
 mod debug;
-mod drop_quad;
 mod droplet;
 mod droplets;
 mod quad;

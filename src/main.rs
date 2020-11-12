@@ -12,6 +12,7 @@ mod background;
 mod debug;
 mod drop_quad;
 mod droplet;
+mod droplets;
 mod quad;
 pub mod render_gl;
 pub mod resources;
@@ -20,6 +21,7 @@ mod vertex;
 use crate::debug::failure_to_string;
 use crate::drop_quad::DropQuad;
 use crate::droplet::Droplet;
+use crate::droplets::Droplets;
 use crate::quad::Quad;
 use crate::render_gl::{Program, Texture};
 use crate::vertex::Vertex;
@@ -158,15 +160,7 @@ fn run() -> Result<(), failure::Error> {
 
     let mut rng = rand::thread_rng();
 
-    let mut total_droplets: usize = 0;
-    let mut droplets: Vec<Droplet> = (0..MAX_DROPLET_COUNT)
-        .map(|_| {
-            let mut d = Droplet::new();
-            d.deleted = true;
-
-            d
-        })
-        .collect();
+    let mut droplets: Droplets = Droplets::with_capacity(MAX_DROPLET_COUNT);
 
     let mut world = CollisionWorld::new(2.0);
 
@@ -236,10 +230,7 @@ fn run() -> Result<(), failure::Error> {
             .position([20.0, 20.0], imgui::Condition::Appearing)
             .always_auto_resize(true);
         w.build(&ui, || {
-            let (head, tail) = frames.as_slices();
-
-            let mut values = head.to_vec();
-            values.extend_from_slice(tail);
+            let values = frames.iter().copied().collect::<Vec<f32>>();
 
             ui.text(&imgui::im_str!(
                 "FPS: {:.1} ({:.1}ms)",
@@ -256,35 +247,30 @@ fn run() -> Result<(), failure::Error> {
         let resolution: na::Vector2<f32> =
             na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        gravity_non_linear(&mut droplets, &mut total_droplets, &mut world, &delta);
+        gravity_non_linear(&mut droplets, &mut world, &delta);
 
         updates.clear();
 
-        if total_droplets < MAX_DROPLET_COUNT {
-            if let Some((i, d)) = droplets.iter_mut().enumerate().find(|(_, d)| d.deleted) {
-                d.deleted = false;
-                d.pos = na::Vector2::new(
-                    rng.gen_range(0.0, viewport.w as f32),
-                    rng.gen_range(0.0, viewport.h as f32),
-                );
-                d.size = rng.gen_range(1.5, 7.0);
+        if let Some((i, d)) = droplets.checkout() {
+            d.pos = na::Vector2::new(
+                rng.gen_range(0.0, viewport.w as f32),
+                rng.gen_range(0.0, viewport.h as f32),
+            );
+            d.size = rng.gen_range(1.5, 7.0);
 
-                total_droplets += 1;
+            let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
 
-                let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+            let handle = world
+                .add(
+                    Isometry2::new(d.pos.clone_owned(), na::zero()),
+                    shape_handle,
+                    collision_group,
+                    contacts_query,
+                    i,
+                )
+                .0;
 
-                let handle = world
-                    .add(
-                        Isometry2::new(d.pos.clone_owned(), na::zero()),
-                        shape_handle,
-                        collision_group,
-                        contacts_query,
-                        i,
-                    )
-                    .0;
-
-                d.collision_handle = handle;
-            }
+            d.collision_handle = handle;
         }
 
         for ev in world.proximity_events().iter().collect::<Vec<_>>() {
@@ -334,10 +320,8 @@ fn run() -> Result<(), failure::Error> {
 
         for (_, delete_handle) in updates.iter() {
             if let Some(delete) = world.collision_object(*delete_handle) {
-                droplets[*delete.data()].deleted = true;
+                droplets.free(*delete.data());
                 world.remove(&[*delete_handle]);
-
-                total_droplets -= 1;
             }
         }
 
@@ -371,7 +355,7 @@ fn render_droplets(
     resolution: &na::Vector2<f32>,
     texture: Rc<Texture>,
     quad: &Quad,
-    droplets: &Vec<Droplet>,
+    droplets: &Droplets,
 ) {
     let program_matrix_location = program.get_uniform_location("MVP");
     let texture_location = program.get_uniform_location("Texture");
@@ -398,8 +382,8 @@ fn render_droplets(
     instance_vbo.bind();
 
     let offsets: Vec<na::Vector3<f32>> = droplets
-        .iter()
-        .filter(|&d| !d.deleted)
+        .into_iter()
+        .filter(|d| !d.deleted)
         .map(|d| na::Vector3::new(d.pos.x, d.pos.y, d.size))
         .collect();
 
@@ -438,8 +422,7 @@ const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.2;
 const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
 
 fn gravity_non_linear(
-    droplets: &mut Vec<Droplet>,
-    total_droplets: &mut usize,
+    droplets: &mut Droplets,
     world: &mut CollisionWorld<f32, usize>,
     dt: &Duration,
 ) {
@@ -447,19 +430,14 @@ fn gravity_non_linear(
 
     let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
 
-    for i in 0..droplets.len() {
-        let droplet = &mut droplets[i];
+    let mut deleted: Vec<usize> = Vec::new();
 
+    for (i, droplet) in droplets.into_iter().enumerate() {
         if droplet.deleted {
             continue;
         }
 
-        if droplet.collided {
-            droplet.collided = false;
-            droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
-            droplet.skipping = false;
-            droplet.slowing = false;
-        } else if droplet.seed <= 0 {
+        if droplet.seed <= 0 {
             droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
             droplet.skipping = droplet.skipping == false;
             droplet.slowing = true;
@@ -469,8 +447,7 @@ fn gravity_non_linear(
 
         if droplet.speed.y > 0.0 {
             if droplet.slowing {
-                droplet.speed.y *= 0.9;
-                droplet.speed.x *= 0.9;
+                droplet.speed *= 0.9;
                 if droplet.speed.y < gravity_y {
                     droplet.slowing = false;
                 }
@@ -495,11 +472,9 @@ fn gravity_non_linear(
         droplet.pos.x += droplet.speed.x;
 
         if droplet.pos.y + droplet.size * 0.5 < 0.0 {
-            droplet.deleted = true;
+            deleted.push(i);
 
             world.remove(&[droplet.collision_handle]);
-
-            *total_droplets -= 1;
 
             continue;
         }
@@ -511,6 +486,10 @@ fn gravity_non_linear(
 
             object.set_position(Isometry2::new(droplet.pos.clone_owned(), na::zero()));
         }
+    }
+
+    for i in deleted {
+        droplets.free(i);
     }
 
     world.update();

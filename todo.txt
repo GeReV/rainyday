@@ -1,4 +1,4 @@
-﻿1. Optimize unused droplet pool with a queue of unused indices.
+﻿# 1. Optimize unused droplet pool with a queue of unused indices.
 2. Movement should be less prevalent.
 3. Allow droplets to "shed" smaller droplets.
 4. Bigger droplets should travel faster.

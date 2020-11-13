@@ -55,6 +55,10 @@ impl Droplets {
     pub fn len(&self) -> usize {
         self.droplets.len()
     }
+
+    pub fn used_count(&self) -> usize {
+        self.len() - self.unused.len()
+    }
 }
 
 impl<'a> IntoIterator for &'a Droplets {

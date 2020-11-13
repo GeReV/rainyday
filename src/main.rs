@@ -46,6 +46,8 @@ use std::time::{Duration, Instant};
 
 const MAX_DROPLET_COUNT: usize = 10_000;
 
+const DROPLETS_PER_SECOND: usize = 50;
+
 fn main() {
     if let Err(e) = run() {
         println!("{}", failure_to_string(e));
@@ -180,6 +182,9 @@ fn run() -> Result<(), failure::Error> {
 
     let mut frames: VecDeque<f32> = VecDeque::with_capacity(100);
 
+    let mut time_accumulator: f64 = 0.;
+    let mut droplets_accumulator: usize = DROPLETS_PER_SECOND;
+
     'main: loop {
         for event in event_pump.poll_iter() {
             imgui_sdl2.handle_event(&mut imgui, &event);
@@ -249,26 +254,35 @@ fn run() -> Result<(), failure::Error> {
 
         updates.clear();
 
-        if let Some((i, d)) = droplets.checkout() {
-            d.pos = na::Vector2::new(
-                rng.gen_range(0.0, viewport.w as f32),
-                rng.gen_range(0.0, viewport.h as f32),
-            );
-            d.size = rng.gen_range(1.5, 7.0);
+        // We get an "allowance" of DROPLETS_PER_SECOND every second.
+        // This part of the loop will attempt to spend them at random times, and is more likely to
+        // spend them the more time has past.
+        // TODO: Any better way to spend these more evenly?
+        // TODO: What happens when budget > fps?
+        if droplets_accumulator > 0 && rng.gen_bool(time_accumulator.max(0.0).min(1.0)) {
+            if let Some((i, d)) = droplets.checkout() {
+                d.pos = na::Vector2::new(
+                    rng.gen_range(0.0, viewport.w as f32),
+                    rng.gen_range(0.0, viewport.h as f32),
+                );
+                d.size = rng.gen_range(1.5, 7.0);
 
-            let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+                let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
 
-            let handle = world
-                .add(
-                    Isometry2::new(d.pos.clone_owned(), na::zero()),
-                    shape_handle,
-                    collision_group,
-                    contacts_query,
-                    i,
-                )
-                .0;
+                let handle = world
+                    .add(
+                        Isometry2::new(d.pos.clone_owned(), na::zero()),
+                        shape_handle,
+                        collision_group,
+                        contacts_query,
+                        i,
+                    )
+                    .0;
 
-            d.collision_handle = handle;
+                d.collision_handle = handle;
+
+                droplets_accumulator -= 1;
+            }
         }
 
         for ev in world.proximity_events().iter().collect::<Vec<_>>() {
@@ -341,6 +355,14 @@ fn run() -> Result<(), failure::Error> {
         renderer.render(ui);
 
         window.gl_swap_window();
+
+        time_accumulator += delta.as_secs_f64();
+
+        if time_accumulator > 1.0 {
+            time_accumulator -= 1.0;
+
+            droplets_accumulator += DROPLETS_PER_SECOND;
+        }
     }
 
     Ok(())

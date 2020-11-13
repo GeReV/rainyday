@@ -323,7 +323,7 @@ fn run() -> Result<(), failure::Error> {
                 let keep_droplet = &mut droplets[keep_droplet_index];
 
                 // TODO: How much does a droplet grow when is absorbs another?
-                keep_droplet.size += delete_droplet_size.cbrt() * 0.5;
+                keep_droplet.size += (delete_droplet_size * 0.5).cbrt();
 
                 keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size * 0.5)));
             }

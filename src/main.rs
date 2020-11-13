@@ -241,6 +241,9 @@ fn run() -> Result<(), failure::Error> {
                 .scale_min(0.0)
                 .graph_size([220.0, 60.0])
                 .build();
+            ui.text(&imgui::im_str!("Drops: {}", droplets.used_count()));
+            ui.text(&imgui::im_str!("Time accumulator: {:.2}", time_accumulator));
+            ui.text(&imgui::im_str!("Drops budget: {}", droplets_accumulator));
         });
 
         let resolution: na::Vector2<f32> =

@@ -219,14 +219,10 @@ fn run() -> Result<(), failure::Error> {
 
         let ui = imgui.frame();
 
-        {
-            let temp_frames = &mut frames;
-
-            if temp_frames.len() == 100 {
-                temp_frames.pop_front();
-            }
-            temp_frames.push_back(ui.io().framerate);
+        if frames.len() == 100 {
+            frames.pop_front();
         }
+        frames.push_back(ui.io().framerate);
 
         let w = imgui::Window::new(imgui::im_str!("FPS"))
             .opened(&mut opened)

@@ -36,7 +36,7 @@ use ncollide2d::pipeline::{
 };
 use ncollide2d::query::Proximity;
 use ncollide2d::shape::{Ball, ShapeHandle};
-use rand::Rng;
+use rand::prelude::*;
 use render_gl::buffer::*;
 use resources::Resources;
 use std::collections::VecDeque;
@@ -47,6 +47,10 @@ use std::time::{Duration, Instant};
 const MAX_DROPLET_COUNT: usize = 10_000;
 
 const DROPLETS_PER_SECOND: usize = 50;
+
+const DROPLET_SIZE_GRAVITY_THRESHOLD: f32 = 5.0;
+const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.25;
+const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
 
 fn main() {
     if let Err(e) = run() {
@@ -249,7 +253,16 @@ fn run() -> Result<(), failure::Error> {
         let resolution: na::Vector2<f32> =
             na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
 
-        gravity_non_linear(&mut droplets, &mut world, &delta);
+        gravity_non_linear(&mut droplets, &mut world, &mut rng, &delta);
+
+        trail(
+            &mut droplets,
+            &mut world,
+            &mut rng,
+            &collision_group,
+            &contacts_query,
+            &delta,
+        );
 
         updates.clear();
 
@@ -264,7 +277,7 @@ fn run() -> Result<(), failure::Error> {
                     rng.gen_range(0.0, viewport.w as f32),
                     rng.gen_range(0.0, viewport.h as f32),
                 );
-                d.size = rng.gen_range(1.5, 7.0);
+                d.size = rng.gen_range(3.0, 8.0);
 
                 let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
 
@@ -323,7 +336,10 @@ fn run() -> Result<(), failure::Error> {
                 let keep_droplet = &mut droplets[keep_droplet_index];
 
                 // TODO: How much does a droplet grow when is absorbs another?
-                keep_droplet.size += (delete_droplet_size * 0.5).cbrt();
+                keep_droplet.size = ((keep_droplet.size * 0.5).powf(3.0)
+                    + (delete_droplet_size * 0.5).powf(3.0))
+                .cbrt()
+                    * 2.0;
 
                 keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size * 0.5)));
             }
@@ -437,16 +453,13 @@ fn render_droplets(
     quad.vao.unbind();
 }
 
-const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.2;
-const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
-
 fn gravity_non_linear(
     droplets: &mut Droplets,
     world: &mut CollisionWorld<f32, usize>,
+    rng: &mut ThreadRng,
     dt: &Duration,
 ) {
-    let mut rng = rand::thread_rng();
-
+    let fps = 1.0 / dt.as_secs_f32();
     let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
 
     for i in 0..droplets.len() {
@@ -455,17 +468,25 @@ fn gravity_non_linear(
         {
             let droplet = &mut droplets[i];
 
-            if droplet.deleted {
+            if droplet.deleted || droplet.size < DROPLET_SIZE_GRAVITY_THRESHOLD {
                 continue;
             }
 
+            if droplet.size < DROPLET_SIZE_GRAVITY_THRESHOLD && droplet.seed > 0 {
+                droplet.slowing = true;
+            }
+
+            let movement_probability = 0.01 * dt.as_secs_f64();
+
             if droplet.seed <= 0 {
-                droplet.seed = (droplet.size * rng.gen::<f32>() * 100.0).floor() as i32;
+                droplet.seed = (droplet.size * 0.5 * rng.gen_range(0.0, 1.0) * fps).floor() as i32;
                 droplet.skipping = droplet.skipping == false;
                 droplet.slowing = true;
             }
 
             droplet.seed -= 1;
+
+            assert!(droplet.size >= 1.0);
 
             if droplet.speed.y > 0.0 {
                 if droplet.slowing {
@@ -480,7 +501,7 @@ fn gravity_non_linear(
                     droplet.speed.y += gravity_y * droplet.size;
                     droplet.speed.x += PRIVATE_GRAVITY_FORCE_FACTOR_X * droplet.size;
                 }
-            } else if droplet.seed >= (95.0 * droplet.size) as i32 {
+            } else if rng.gen_bool((1.0 - 1.0 / droplet.size as f64) * movement_probability) {
                 droplet.speed.y = gravity_y;
                 droplet.speed.x = PRIVATE_GRAVITY_FORCE_FACTOR_X;
             }
@@ -512,4 +533,66 @@ fn gravity_non_linear(
     }
 
     world.update();
+}
+
+fn trail(
+    droplets: &mut Droplets,
+    world: &mut CollisionWorld<f32, usize>,
+    rng: &mut ThreadRng,
+    collision_group: &CollisionGroups,
+    contacts_query: &GeometricQueryType<f32>,
+    dt: &Duration,
+) {
+    let gravity_y = PRIVATE_GRAVITY_FORCE_FACTOR_Y * dt.as_secs_f32();
+
+    for i in 0..droplets.len() {
+        let pos;
+        let size;
+
+        {
+            let droplet = &mut droplets[i];
+
+            if droplet.speed.y <= gravity_y {
+                continue;
+            }
+
+            if droplet.size >= 6.0
+                && (droplet.last_trail_y.is_none()
+                    || (droplet.last_trail_y.unwrap_or(0.0) - droplet.pos.y)
+                        >= rng.gen_range(0.1, 1.0) * 200.0)
+            {
+                droplet.last_trail_y = Some(droplet.pos.y);
+
+                size = rng.gen_range(0.9, 1.1) * droplet.size * 0.25;
+                pos = Vector2::new(
+                    droplet.pos.x + rng.gen_range(-1.0, 1.0),
+                    droplet.pos.y + droplet.size * 0.5 + droplet.speed.y + size * 0.5,
+                );
+
+                droplet.size =
+                    ((droplet.size * 0.5).powf(3.0) - (size * 0.5).powf(3.0)).cbrt() * 2.0;
+            } else {
+                continue;
+            }
+        }
+
+        if let Some((i, d)) = droplets.checkout() {
+            d.pos = pos;
+            d.size = size;
+
+            let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+
+            let handle = world
+                .add(
+                    Isometry2::new(d.pos.clone_owned(), na::zero()),
+                    shape_handle,
+                    *collision_group,
+                    *contacts_query,
+                    i,
+                )
+                .0;
+
+            d.collision_handle = handle;
+        }
+    }
 }

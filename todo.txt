@@ -1,7 +1,7 @@
 ﻿# 1. Optimize unused droplet pool with a queue of unused indices.
 # 2. Movement should be less prevalent.
-3. Allow droplets to "shed" smaller droplets.
-4. Bigger droplets should travel faster.
+# 3. Allow droplets to "shed" smaller droplets.
+# 4. Bigger droplets should travel faster.
 5. Droplets should be able to transfer some velocity on collision.
 6. Droplets should have maximum size.
 # 7. Make droplet spawning time-dependent instead of FPS-dependent.

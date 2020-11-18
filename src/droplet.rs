@@ -10,6 +10,7 @@ pub struct Droplet {
     pub deleted: bool,
     pub slowing: bool,
     pub collision_handle: CollisionObjectSlabHandle,
+    pub last_trail_y: Option<f32>,
 }
 
 impl Droplet {
@@ -23,6 +24,7 @@ impl Droplet {
             deleted: false,
             slowing: false,
             collision_handle: CollisionObjectSlabHandle(0),
+            last_trail_y: None,
         }
     }
 }

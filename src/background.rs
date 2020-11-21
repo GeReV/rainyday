@@ -118,7 +118,6 @@ const KERNEL1_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
 pub struct Background {
     program: render_gl::Program,
     texture: Rc<render_gl::Texture>,
-    screen_buffer: Texture,
     mid_buffer_r: Texture,
     mid_program_r: render_gl::Program,
     mid_buffer_g: Texture,
@@ -130,6 +129,7 @@ pub struct Background {
     program_projection_location: Option<i32>,
     resolution_location: Option<i32>,
     quad: quad::Quad,
+    filter_radius: f32,
 }
 
 impl Background {
@@ -139,6 +139,7 @@ impl Background {
         texture: Rc<render_gl::Texture>,
         screen_width: u32,
         screen_height: u32,
+        filter_radius: f32,
     ) -> Result<Background, failure::Error> {
         // set up shader program
         let program = render_gl::Program::from_res(gl, res, "shaders/background")?;
@@ -171,8 +172,6 @@ impl Background {
         let right = target_dimensions.0 - offsets.0;
 
         let quad = quad::Quad::new_with_size(gl, bottom, left, top, right);
-
-        let screen_buffer = Texture::new(gl, screen_width, screen_height)?;
 
         let mid_buffer_r = Texture::new(gl, screen_width, screen_height)?;
         let mid_buffer_g = Texture::new(gl, screen_width, screen_height)?;
@@ -221,7 +220,6 @@ impl Background {
         Ok(Background {
             texture,
             program,
-            screen_buffer,
             mid_buffer_r,
             mid_program_r,
             mid_buffer_g,
@@ -233,13 +231,13 @@ impl Background {
             program_projection_location,
             resolution_location,
             quad,
+            filter_radius,
         })
     }
 
-    pub fn render(
+    pub fn prepass(
         &self,
         gl: &gl::Gl,
-        filter_radius: f32,
         view_matrix: &na::Matrix4<f32>,
         proj_matrix: &na::Matrix4<f32>,
         resolution: &na::Vector2<f32>,
@@ -249,7 +247,6 @@ impl Background {
             &self.mid_program_r,
             &self.frame_buffer,
             &self.mid_buffer_r,
-            filter_radius,
             view_matrix,
             proj_matrix,
             resolution,
@@ -260,7 +257,6 @@ impl Background {
             &self.mid_program_g,
             &self.frame_buffer,
             &self.mid_buffer_g,
-            filter_radius,
             view_matrix,
             proj_matrix,
             resolution,
@@ -271,12 +267,67 @@ impl Background {
             &self.mid_program_b,
             &self.frame_buffer,
             &self.mid_buffer_b,
-            filter_radius,
             view_matrix,
             proj_matrix,
             resolution,
         );
+    }
 
+    fn render_pass(
+        &self,
+        gl: &gl::Gl,
+        program: &render_gl::Program,
+        frame_buffer: &FrameBuffer,
+        texture_buffer: &Texture,
+        view_matrix: &na::Matrix4<f32>,
+        proj_matrix: &na::Matrix4<f32>,
+        resolution: &na::Vector2<f32>,
+    ) {
+        program.set_used();
+
+        if let Some(loc) = program.get_uniform_location("Texture") {
+            self.texture.bind_at(0);
+            program.set_uniform_1i(loc, 0);
+        }
+
+        if let Some(loc) = program.get_uniform_location("Resolution") {
+            program.set_uniform_2f(loc, resolution);
+        }
+
+        if let Some(loc) = program.get_uniform_location("View") {
+            program.set_uniform_matrix_4fv(loc, view_matrix);
+        }
+
+        if let Some(loc) = program.get_uniform_location("Projection") {
+            program.set_uniform_matrix_4fv(loc, proj_matrix);
+        }
+
+        if let Some(loc) = program.get_uniform_location("FilterRadius") {
+            program.set_uniform_1f(loc, self.filter_radius)
+        }
+
+        if let Some(loc) = program.get_uniform_location("Kernel0") {
+            program.set_uniform_4fv(loc, &KERNEL0_REAL_X_IM_Y_REAL_Z_IM_W[..])
+        }
+        if let Some(loc) = program.get_uniform_location("Kernel1") {
+            program.set_uniform_4fv(loc, &KERNEL1_REAL_X_IM_Y_REAL_Z_IM_W[..])
+        }
+
+        frame_buffer.bind();
+        frame_buffer.attach_texture(texture_buffer);
+
+        self.quad.render(gl);
+
+        frame_buffer.unbind();
+    }
+
+    pub fn render(
+        &self,
+        gl: &gl::Gl,
+        view_matrix: &na::Matrix4<f32>,
+        proj_matrix: &na::Matrix4<f32>,
+        resolution: &na::Vector2<f32>,
+    ) {
         self.program.set_used();
 
         if let Some(loc) = self.program.get_uniform_location("TextureR") {
@@ -304,7 +355,7 @@ impl Background {
         }
 
         if let Some(loc) = self.program.get_uniform_location("FilterRadius") {
-            self.program.set_uniform_1f(loc, filter_radius)
+            self.program.set_uniform_1f(loc, self.filter_radius)
         }
 
         if let Some(loc) = self.resolution_location {
@@ -320,54 +371,5 @@ impl Background {
         }
 
         self.quad.render(gl);
-    }
-
-    fn render_pass(
-        &self,
-        gl: &gl::Gl,
-        program: &render_gl::Program,
-        frame_buffer: &FrameBuffer,
-        texture_buffer: &Texture,
-        filter_radius: f32,
-        view_matrix: &na::Matrix4<f32>,
-        proj_matrix: &na::Matrix4<f32>,
-        resolution: &na::Vector2<f32>,
-    ) {
-        program.set_used();
-
-        if let Some(loc) = program.get_uniform_location("Texture") {
-            self.texture.bind_at(0);
-            program.set_uniform_1i(loc, 0);
-        }
-
-        if let Some(loc) = program.get_uniform_location("Resolution") {
-            program.set_uniform_2f(loc, resolution);
-        }
-
-        if let Some(loc) = program.get_uniform_location("View") {
-            program.set_uniform_matrix_4fv(loc, view_matrix);
-        }
-
-        if let Some(loc) = program.get_uniform_location("Projection") {
-            program.set_uniform_matrix_4fv(loc, proj_matrix);
-        }
-
-        if let Some(loc) = program.get_uniform_location("FilterRadius") {
-            program.set_uniform_1f(loc, filter_radius)
-        }
-
-        if let Some(loc) = program.get_uniform_location("Kernel0") {
-            program.set_uniform_4fv(loc, &KERNEL0_REAL_X_IM_Y_REAL_Z_IM_W[..])
-        }
-        if let Some(loc) = program.get_uniform_location("Kernel1") {
-            program.set_uniform_4fv(loc, &KERNEL1_REAL_X_IM_Y_REAL_Z_IM_W[..])
-        }
-
-        frame_buffer.bind();
-        frame_buffer.attach_texture(texture_buffer);
-
-        self.quad.render(gl);
-
-        frame_buffer.unbind();
     }
 }

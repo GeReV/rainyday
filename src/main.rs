@@ -124,7 +124,7 @@ fn run() -> Result<(), failure::Error> {
         .with_gen_mipmaps()
         .load(&gl, &res)?;
 
-    let texture_rc = Rc::<render_gl::Texture>::new(background_texture);
+    let texture_rc = Rc::<Texture>::new(background_texture);
 
     let texture_buffer = Texture::new(
         &gl,
@@ -140,13 +140,14 @@ fn run() -> Result<(), failure::Error> {
         texture_rc.clone(),
         initial_window_size.0 as u32,
         initial_window_size.1 as u32,
+        1.0,
     )?;
 
     let quad = Quad::default(&gl);
 
     viewport.set_used(&gl);
 
-    let color_buffer = render_gl::ColorBuffer::from_rgb(na::Vector3::new(0.3, 0.3, 0.5));
+    let color_buffer = render_gl::ColorBuffer::from_rgb(0.3, 0.3, 0.5);
 
     color_buffer.set_used(&gl);
 
@@ -168,9 +169,20 @@ fn run() -> Result<(), failure::Error> {
 
     let mut instant = Instant::now();
 
-    let program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
+    let drop_program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
     let drop_wipe_program = Program::from_res(&gl, &res, "shaders/drop_wipe")?;
     let colored_quad_program = Program::from_res(&gl, &res, "shaders/colored_quad")?;
+    let final_program = Program::from_shaders(
+        &gl,
+        &[
+            Shader::from_res(&gl, &res, "shaders/quad.vert")?,
+            Shader::from_res(&gl, &res, "shaders/final.frag")?,
+        ],
+    )
+    .map_err(|msg| Error::LinkError {
+        message: msg,
+        name: "final".to_string(),
+    })?;
 
     let mut updates = Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new();
 
@@ -187,11 +199,25 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
+    let background_tex = Texture::new(
+        &gl,
+        initial_window_size.0 as u32,
+        initial_window_size.1 as u32,
+    )?;
+
+    let fullscreen_quad = Quad::new_with_size(
+        &gl,
+        0.0,
+        0.0,
+        initial_window_size.1 as f32,
+        initial_window_size.0 as f32,
+    );
+
+    let black = ColorBuffer::from_rgba(0.0, 0.0, 0.0, 1.0);
+
     {
         frame_buffer.bind();
         frame_buffer.attach_texture(&background_mask);
-
-        let black = ColorBuffer::from_rgba(na::Vector4::new(0.0, 0.0, 0.0, 1.0));
 
         black.set_used(&gl);
         black.clear(&gl);
@@ -362,26 +388,17 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
-        let fullscreen_quad = Quad::new_with_size(
-            &gl,
-            0.0,
-            0.0,
-            initial_window_size.1 as f32,
-            initial_window_size.0 as f32,
-        );
-
-        let tex0 = Texture::new(
-            &gl,
-            initial_window_size.0 as u32,
-            initial_window_size.1 as u32,
-        )?;
-
         // Background pass
         {
-            frame_buffer.bind();
-            frame_buffer.attach_texture(&tex0);
+            let resolution =
+                Vector2::new(initial_window_size.0 as f32, initial_window_size.1 as f32);
 
-            background.render(&gl, 1.0, &view, &matrix, &resolution);
+            background.prepass(&gl, &view, &matrix, &resolution);
+
+            frame_buffer.bind();
+            frame_buffer.attach_texture(&background_tex);
+
+            background.render(&gl, &view, &matrix, &resolution);
 
             frame_buffer.unbind();
         }
@@ -391,11 +408,11 @@ fn run() -> Result<(), failure::Error> {
             frame_buffer.bind();
             frame_buffer.attach_texture(&background_mask);
 
-            {
-                unsafe {
-                    gl.BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ZERO, gl::ONE);
-                }
+            unsafe {
+                gl.BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ZERO, gl::ONE);
+            }
 
+            {
                 colored_quad_program.set_used();
 
                 if let Some(loc) = colored_quad_program.get_uniform_location("MVP") {
@@ -436,27 +453,19 @@ fn run() -> Result<(), failure::Error> {
             frame_buffer.unbind();
         }
 
+        // Merge pass
         {
-            let final_program = Program::from_shaders(
-                &gl,
-                &[
-                    Shader::from_res(&gl, &res, "shaders/quad.vert")?,
-                    Shader::from_res(&gl, &res, "shaders/final.frag")?,
-                ],
-            )
-            .map_err(|msg| Error::LinkError {
-                message: msg,
-                name: "final".to_string(),
-            })?;
-
             final_program.set_used();
+
+            black.set_used(&gl);
+            black.clear(&gl);
 
             if let Some(loc) = final_program.get_uniform_location("MVP") {
                 final_program.set_uniform_matrix_4fv(loc, &matrix);
             }
 
             if let Some(loc) = final_program.get_uniform_location("Texture0") {
-                tex0.bind_at(0);
+                background_tex.bind_at(0);
                 final_program.set_uniform_1i(loc, 0);
             }
             if let Some(loc) = final_program.get_uniform_location("Texture1") {
@@ -472,23 +481,19 @@ fn run() -> Result<(), failure::Error> {
         }
 
         {
-            let program_matrix_location = program.get_uniform_location("MVP");
-            let texture_location = program.get_uniform_location("Texture");
-            let resolution_location = program.get_uniform_location("Resolution");
+            drop_program.set_used();
 
-            program.set_used();
-
-            if let Some(loc) = resolution_location {
-                program.set_uniform_2f(loc, &resolution);
+            if let Some(loc) = drop_program.get_uniform_location("Resolution") {
+                drop_program.set_uniform_2f(loc, &resolution);
             }
 
-            if let Some(loc) = program_matrix_location {
-                program.set_uniform_matrix_4fv(loc, &matrix);
+            if let Some(loc) = drop_program.get_uniform_location("MVP") {
+                drop_program.set_uniform_matrix_4fv(loc, &matrix);
             }
 
-            if let Some(loc) = texture_location {
+            if let Some(loc) = drop_program.get_uniform_location("Texture") {
                 texture_rc.bind_at(0);
-                program.set_uniform_1i(loc, 0);
+                drop_program.set_uniform_1i(loc, 0);
             }
 
             render_droplets(&gl, &quad, &droplets);

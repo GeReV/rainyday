@@ -18,5 +18,5 @@ void main()
     vec4 tex0 = texture(Texture0, IN.Uv);
     vec4 tex1 = texture(Texture1, IN.Uv);
 
-    Color = mix(tex0, tex1, mask.r) * IN.Color;
+    Color = mix(tex0, tex1, clamp(mask.r, 0.0, 1.0)) * IN.Color;
 }

@@ -5,5 +5,5 @@
 5. Droplets should be able to transfer some velocity on collision.
 6. Droplets should have maximum size.
 # 7. Make droplet spawning time-dependent instead of FPS-dependent.
-8. Vapor wipe effect.
+# 8. Vapor wipe effect.
 # 9. Collision ball larger than should be?

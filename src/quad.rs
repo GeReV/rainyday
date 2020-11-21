@@ -13,43 +13,46 @@ pub struct Quad {
 }
 
 impl Quad {
-    pub fn new(gl: &gl::Gl) -> Result<Quad, failure::Error> {
+    pub fn default(gl: &gl::Gl) -> Quad {
         Quad::new_with_size(gl, -0.5, -0.5, 0.5, 0.5)
     }
 
-    pub fn new_with_size(
+    pub fn new_with_size(gl: &gl::Gl, bottom: f32, left: f32, top: f32, right: f32) -> Quad {
+        Quad::new(gl, bottom, left, top, right, (1.0, 1.0, 1.0, 1.0))
+    }
+
+    pub fn new(
         gl: &gl::Gl,
         bottom: f32,
         left: f32,
         top: f32,
         right: f32,
-    ) -> Result<Quad, failure::Error> {
+        color: (f32, f32, f32, f32),
+    ) -> Quad {
         let v0 = (left, bottom, 0.0);
         let v1 = (left, top, 0.0);
         let v2 = (right, bottom, 0.0);
         let v3 = (right, top, 0.0);
 
-        let white = (1.0, 1.0, 1.0, 1.0);
-
         let vbo_data = vec![
             Vertex {
                 pos: v0.into(),
-                clr: white.into(),
+                clr: color.into(),
                 uv: (0.0, 0.0).into(),
             }, // 0
             Vertex {
                 pos: v1.into(),
-                clr: white.into(),
+                clr: color.into(),
                 uv: (0.0, 1.0).into(),
             }, // 1
             Vertex {
                 pos: v2.into(),
-                clr: white.into(),
+                clr: color.into(),
                 uv: (1.0, 0.0).into(),
             }, // 2
             Vertex {
                 pos: v3.into(),
-                clr: white.into(),
+                clr: color.into(),
                 uv: (1.0, 1.0).into(),
             }, // 3
         ];
@@ -79,12 +82,12 @@ impl Quad {
         vbo.unbind();
         ebo.unbind();
 
-        Ok(Quad {
+        Quad {
             _vbo: vbo,
             _ebo: ebo,
             index_count: ebo_data.len() as i32,
             vao,
-        })
+        }
     }
 
     pub fn render(&self, gl: &gl::Gl) {

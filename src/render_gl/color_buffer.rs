@@ -6,10 +6,12 @@ pub struct ColorBuffer {
 }
 
 impl ColorBuffer {
-    pub fn from_color(color: na::Vector3<f32>) -> ColorBuffer {
-        ColorBuffer {
-            color: color.fixed_resize::<na::U4, na::U1>(1.0),
-        }
+    pub fn from_rgba(color: na::Vector4<f32>) -> ColorBuffer {
+        ColorBuffer { color }
+    }
+
+    pub fn from_rgb(color: na::Vector3<f32>) -> ColorBuffer {
+        Self::from_rgba(color.fixed_resize::<na::U4, na::U1>(1.0))
     }
 
     pub fn update_color(&mut self, color: na::Vector3<f32>) {
@@ -18,7 +20,7 @@ impl ColorBuffer {
 
     pub fn set_used(&self, gl: &gl::Gl) {
         unsafe {
-            gl.ClearColor(self.color.x, self.color.y, self.color.z, 1.0);
+            gl.ClearColor(self.color.x, self.color.y, self.color.z, self.color.w);
         }
     }
 

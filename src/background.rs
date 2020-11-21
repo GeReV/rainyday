@@ -170,7 +170,7 @@ impl Background {
         let top = target_dimensions.1 - offsets.1;
         let right = target_dimensions.0 - offsets.0;
 
-        let quad = quad::Quad::new_with_size(gl, bottom, left, top, right)?;
+        let quad = quad::Quad::new_with_size(gl, bottom, left, top, right);
 
         let screen_buffer = Texture::new(gl, screen_width, screen_height)?;
 

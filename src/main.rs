@@ -21,11 +21,11 @@ use crate::debug::failure_to_string;
 use crate::droplet::Droplet;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
-use crate::render_gl::{Program, Texture};
+use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture};
 use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
-use nalgebra::{Isometry2, Point2, Vector2};
+use nalgebra::{Isometry2, Point2, Vector2, Vector3};
 use ncollide2d as nc;
 use ncollide2d::bounding_volume::BoundingSphere;
 use ncollide2d::broad_phase::{BroadPhase, DBVTBroadPhase};
@@ -120,29 +120,19 @@ fn run() -> Result<(), failure::Error> {
 
     let matrix = projection.into_inner() * view;
 
-    let texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
+    let background_texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
         .with_gen_mipmaps()
         .load(&gl, &res)?;
 
-    let texture_rc = Rc::<render_gl::Texture>::new(texture);
+    let texture_rc = Rc::<render_gl::Texture>::new(background_texture);
 
-    let texture_buffer = render_gl::Texture::new(
+    let texture_buffer = Texture::new(
         &gl,
         initial_window_size.0 as u32,
         initial_window_size.1 as u32,
     )?;
 
     let frame_buffer = render_gl::FrameBuffer::new(&gl);
-
-    frame_buffer.bind();
-    frame_buffer.attach_texture(&texture_buffer);
-
-    let color_buffer2 = render_gl::ColorBuffer::from_color(na::Vector3::new(0.5, 0.6, 0.8));
-
-    color_buffer2.set_used(&gl);
-    color_buffer2.clear(&gl);
-
-    frame_buffer.unbind();
 
     let background = background::Background::new(
         &res,
@@ -152,11 +142,11 @@ fn run() -> Result<(), failure::Error> {
         initial_window_size.1 as u32,
     )?;
 
-    let quad = Quad::new(&gl)?;
+    let quad = Quad::default(&gl);
 
     viewport.set_used(&gl);
 
-    let color_buffer = render_gl::ColorBuffer::from_color(na::Vector3::new(0.3, 0.3, 0.5));
+    let color_buffer = render_gl::ColorBuffer::from_rgb(na::Vector3::new(0.3, 0.3, 0.5));
 
     color_buffer.set_used(&gl);
 
@@ -179,6 +169,8 @@ fn run() -> Result<(), failure::Error> {
     let mut instant = Instant::now();
 
     let program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
+    let drop_wipe_program = Program::from_res(&gl, &res, "shaders/drop_wipe")?;
+    let colored_quad_program = Program::from_res(&gl, &res, "shaders/colored_quad")?;
 
     let mut updates = Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new();
 
@@ -188,6 +180,24 @@ fn run() -> Result<(), failure::Error> {
 
     let mut time_accumulator: f64 = 0.;
     let mut droplets_accumulator: usize = DROPLETS_PER_SECOND;
+
+    let background_mask = Texture::new(
+        &gl,
+        initial_window_size.0 as u32,
+        initial_window_size.1 as u32,
+    )?;
+
+    {
+        frame_buffer.bind();
+        frame_buffer.attach_texture(&background_mask);
+
+        let black = ColorBuffer::from_rgba(na::Vector4::new(0.0, 0.0, 0.0, 1.0));
+
+        black.set_used(&gl);
+        black.clear(&gl);
+
+        frame_buffer.unbind();
+    }
 
     'main: loop {
         for event in event_pump.poll_iter() {
@@ -352,19 +362,137 @@ fn run() -> Result<(), failure::Error> {
             }
         }
 
-        color_buffer.clear(&gl);
-
-        background.render(&gl, 1.0, &view, &matrix, &resolution);
-
-        render_droplets(
+        let fullscreen_quad = Quad::new_with_size(
             &gl,
-            &program,
-            &matrix,
-            &resolution,
-            texture_rc.clone(),
-            &quad,
-            &droplets,
+            0.0,
+            0.0,
+            initial_window_size.1 as f32,
+            initial_window_size.0 as f32,
         );
+
+        let tex0 = Texture::new(
+            &gl,
+            initial_window_size.0 as u32,
+            initial_window_size.1 as u32,
+        )?;
+
+        // Background pass
+        {
+            frame_buffer.bind();
+            frame_buffer.attach_texture(&tex0);
+
+            background.render(&gl, 1.0, &view, &matrix, &resolution);
+
+            frame_buffer.unbind();
+        }
+
+        // Mask pass
+        {
+            frame_buffer.bind();
+            frame_buffer.attach_texture(&background_mask);
+
+            {
+                unsafe {
+                    gl.BlendFuncSeparate(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA, gl::ZERO, gl::ONE);
+                }
+
+                colored_quad_program.set_used();
+
+                if let Some(loc) = colored_quad_program.get_uniform_location("MVP") {
+                    colored_quad_program.set_uniform_matrix_4fv(loc, &matrix);
+                }
+
+                if let Some(loc) = colored_quad_program.get_uniform_location("Color") {
+                    colored_quad_program.set_uniform_4f(
+                        loc,
+                        &na::Vector4::new(0.0, 0.0, 0.0, 0.25 * delta.as_secs_f32()),
+                    );
+                }
+
+                fullscreen_quad.render(&gl);
+            }
+
+            {
+                let program_matrix_location = drop_wipe_program.get_uniform_location("MVP");
+                let resolution_location = drop_wipe_program.get_uniform_location("Resolution");
+
+                drop_wipe_program.set_used();
+
+                if let Some(loc) = resolution_location {
+                    drop_wipe_program.set_uniform_2f(loc, &resolution);
+                }
+
+                if let Some(loc) = program_matrix_location {
+                    drop_wipe_program.set_uniform_matrix_4fv(loc, &matrix);
+                }
+
+                render_droplets(&gl, &quad, &droplets);
+            }
+
+            unsafe {
+                gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            }
+
+            frame_buffer.unbind();
+        }
+
+        {
+            let final_program = Program::from_shaders(
+                &gl,
+                &[
+                    Shader::from_res(&gl, &res, "shaders/quad.vert")?,
+                    Shader::from_res(&gl, &res, "shaders/final.frag")?,
+                ],
+            )
+            .map_err(|msg| Error::LinkError {
+                message: msg,
+                name: "final".to_string(),
+            })?;
+
+            final_program.set_used();
+
+            if let Some(loc) = final_program.get_uniform_location("MVP") {
+                final_program.set_uniform_matrix_4fv(loc, &matrix);
+            }
+
+            if let Some(loc) = final_program.get_uniform_location("Texture0") {
+                tex0.bind_at(0);
+                final_program.set_uniform_1i(loc, 0);
+            }
+            if let Some(loc) = final_program.get_uniform_location("Texture1") {
+                texture_rc.bind_at(1);
+                final_program.set_uniform_1i(loc, 1);
+            }
+            if let Some(loc) = final_program.get_uniform_location("Mask") {
+                background_mask.bind_at(2);
+                final_program.set_uniform_1i(loc, 2);
+            }
+
+            fullscreen_quad.render(&gl);
+        }
+
+        {
+            let program_matrix_location = program.get_uniform_location("MVP");
+            let texture_location = program.get_uniform_location("Texture");
+            let resolution_location = program.get_uniform_location("Resolution");
+
+            program.set_used();
+
+            if let Some(loc) = resolution_location {
+                program.set_uniform_2f(loc, &resolution);
+            }
+
+            if let Some(loc) = program_matrix_location {
+                program.set_uniform_matrix_4fv(loc, &matrix);
+            }
+
+            if let Some(loc) = texture_location {
+                texture_rc.bind_at(0);
+                program.set_uniform_1i(loc, 0);
+            }
+
+            render_droplets(&gl, &quad, &droplets);
+        }
 
         imgui_sdl2.prepare_render(&ui, &window);
         renderer.render(ui);
@@ -383,34 +511,7 @@ fn run() -> Result<(), failure::Error> {
     Ok(())
 }
 
-fn render_droplets(
-    gl: &gl::Gl,
-    program: &Program,
-    matrix: &na::Matrix4<f32>,
-    resolution: &na::Vector2<f32>,
-    texture: Rc<Texture>,
-    quad: &Quad,
-    droplets: &Droplets,
-) {
-    let program_matrix_location = program.get_uniform_location("MVP");
-    let texture_location = program.get_uniform_location("Texture");
-    let resolution_location = program.get_uniform_location("Resolution");
-
-    program.set_used();
-
-    if let Some(loc) = resolution_location {
-        program.set_uniform_2f(loc, &resolution);
-    }
-
-    if let Some(loc) = program_matrix_location {
-        program.set_uniform_matrix_4fv(loc, &matrix);
-    }
-
-    if let Some(loc) = texture_location {
-        texture.bind_at(0);
-        program.set_uniform_1i(loc, 0);
-    }
-
+fn render_droplets(gl: &gl::Gl, quad: &Quad, droplets: &Droplets) {
     quad.vao.bind();
 
     let instance_vbo: ArrayBuffer = ArrayBuffer::new(&gl);
@@ -571,6 +672,10 @@ fn trail(
 
                 droplet.size =
                     ((droplet.size * 0.5).powf(3.0) - (size * 0.5).powf(3.0)).cbrt() * 2.0;
+
+                if let Some(droplet_collision) = world.get_mut(droplet.collision_handle) {
+                    droplet_collision.set_shape(ShapeHandle::new(Ball::new(droplet.size * 0.5)))
+                }
             } else {
                 continue;
             }

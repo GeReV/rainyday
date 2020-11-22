@@ -12,7 +12,7 @@ extern crate rand;
 
 mod background;
 mod debug;
-#[cfg(debug_assertions)]
+#[cfg(feature = "debug")]
 mod debug_ui;
 mod droplet;
 mod droplets;
@@ -22,7 +22,7 @@ pub mod resources;
 mod vertex;
 
 use crate::debug::failure_to_string;
-#[cfg(debug_assertions)]
+#[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
@@ -160,7 +160,7 @@ fn run() -> Result<(), failure::Error> {
     let collision_group = CollisionGroups::new();
     let contacts_query = GeometricQueryType::Proximity(0.0);
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "debug")]
     let mut debug_ui = DebugUi::new(&window);
 
     unsafe {
@@ -257,7 +257,7 @@ fn run() -> Result<(), failure::Error> {
         }
 
         for event in event_pump.poll_iter() {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "debug")]
             {
                 debug_ui.handle_event(&event);
 
@@ -495,7 +495,7 @@ fn run() -> Result<(), failure::Error> {
             render_droplets(&gl, &quad, &droplets);
         }
 
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "debug")]
         debug_ui.render(
             &window,
             &event_pump.mouse_state(),

@@ -192,6 +192,20 @@ impl Shader {
         Ok(Shader { gl: gl.clone(), id })
     }
 
+    pub fn from_vert_source_str(gl: &gl::Gl, source: &str) -> Result<Shader, Error> {
+        Shader::from_vert_source(gl, &str_to_cstr(source)).map_err(|msg| Error::CompileError {
+            message: msg,
+            name: "".into(),
+        })
+    }
+
+    pub fn from_frag_source_str(gl: &gl::Gl, source: &str) -> Result<Shader, Error> {
+        Shader::from_frag_source(gl, &str_to_cstr(source)).map_err(|msg| Error::CompileError {
+            message: msg,
+            name: "".into(),
+        })
+    }
+
     pub fn from_vert_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, String> {
         Shader::from_source(gl, source, gl::VERTEX_SHADER)
     }
@@ -283,4 +297,8 @@ fn create_whitespace_cstring_with_len(len: usize) -> CString {
     buffer.extend([b' '].iter().cycle().take(len));
     // convert buffer to CString
     unsafe { CString::from_vec_unchecked(buffer) }
+}
+
+fn str_to_cstr(str: &str) -> std::ffi::CString {
+    unsafe { std::ffi::CString::from_vec_unchecked(str.as_bytes().to_vec()) }
 }

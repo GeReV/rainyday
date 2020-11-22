@@ -1,10 +1,17 @@
 ﻿use crate::quad;
-use crate::render_gl::{self, buffer, data, FrameBuffer, Texture};
+use crate::render_gl::{self, buffer, data, Error, FrameBuffer, Program, Shader, Texture};
 use crate::resources::Resources;
 use failure;
 use gl;
 use nalgebra as na;
 use std::rc::Rc;
+
+const BACKGROUND_VERT: &str = include_str!("../assets/shaders/background.vert");
+const BACKGROUND_FRAG: &str = include_str!("../assets/shaders/background.frag");
+const BACKGROUND_PASS_RED_FRAG: &str = include_str!("../assets/shaders/background_pass_red.frag");
+const BACKGROUND_PASS_GREEN_FRAG: &str =
+    include_str!("../assets/shaders/background_pass_green.frag");
+const BACKGROUND_PASS_BLUE_FRAG: &str = include_str!("../assets/shaders/background_pass_blue.frag");
 
 const KERNEL0BRACKETS_REAL_XY_IM_ZW: [f32; 2] = [0.411259, -0.548794];
 const KERNEL0_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
@@ -116,14 +123,14 @@ const KERNEL1_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
 ];
 
 pub struct Background {
-    program: render_gl::Program,
-    texture: Rc<render_gl::Texture>,
+    program: Program,
+    texture: Rc<Texture>,
     mid_buffer_r: Texture,
-    mid_program_r: render_gl::Program,
+    mid_program_r: Program,
     mid_buffer_g: Texture,
-    mid_program_g: render_gl::Program,
+    mid_program_g: Program,
     mid_buffer_b: Texture,
-    mid_program_b: render_gl::Program,
+    mid_program_b: Program,
     frame_buffer: FrameBuffer,
     program_view_location: Option<i32>,
     program_projection_location: Option<i32>,
@@ -134,15 +141,23 @@ pub struct Background {
 
 impl Background {
     pub fn new(
-        res: &Resources,
         gl: &gl::Gl,
-        texture: Rc<render_gl::Texture>,
+        texture: Rc<Texture>,
         screen_width: u32,
         screen_height: u32,
         filter_radius: f32,
     ) -> Result<Background, failure::Error> {
-        // set up shader program
-        let program = render_gl::Program::from_res(gl, res, "shaders/background")?;
+        let program = Program::from_shaders(
+            gl,
+            &[
+                Shader::from_vert_source_str(&gl, BACKGROUND_VERT)?,
+                Shader::from_frag_source_str(&gl, BACKGROUND_FRAG)?,
+            ],
+        )
+        .map_err(|msg| Error::LinkError {
+            message: msg,
+            name: "background".to_string(),
+        })?;
 
         let program_view_location = program.get_uniform_location("View");
         let program_projection_location = program.get_uniform_location("Projection");
@@ -177,43 +192,32 @@ impl Background {
         let mid_buffer_g = Texture::new(gl, screen_width, screen_height)?;
         let mid_buffer_b = Texture::new(gl, screen_width, screen_height)?;
 
-        let background_vert_shader_r =
-            render_gl::Shader::from_res(gl, res, "shaders/background.vert")?;
-        let background_frag_shader_r =
-            render_gl::Shader::from_res(gl, res, "shaders/background_pass_red.frag")?;
-        let background_vert_shader_g =
-            render_gl::Shader::from_res(gl, res, "shaders/background.vert")?;
+        let background_vert_shader_r = Shader::from_vert_source_str(&gl, BACKGROUND_VERT)?;
+        let background_frag_shader_r = Shader::from_frag_source_str(gl, BACKGROUND_PASS_RED_FRAG)?;
+        let background_vert_shader_g = Shader::from_vert_source_str(&gl, BACKGROUND_VERT)?;
         let background_frag_shader_g =
-            render_gl::Shader::from_res(gl, res, "shaders/background_pass_green.frag")?;
-        let background_vert_shader_b =
-            render_gl::Shader::from_res(gl, res, "shaders/background.vert")?;
-        let background_frag_shader_b =
-            render_gl::Shader::from_res(gl, res, "shaders/background_pass_blue.frag")?;
+            Shader::from_frag_source_str(gl, BACKGROUND_PASS_GREEN_FRAG)?;
+        let background_vert_shader_b = Shader::from_vert_source_str(&gl, BACKGROUND_VERT)?;
+        let background_frag_shader_b = Shader::from_frag_source_str(gl, BACKGROUND_PASS_BLUE_FRAG)?;
 
-        let mid_program_r = render_gl::Program::from_shaders(
-            gl,
-            &[background_vert_shader_r, background_frag_shader_r],
-        )
-        .map_err(|msg| render_gl::Error::LinkError {
-            message: msg,
-            name: "mid_program_r".to_string(),
-        })?;
-        let mid_program_g = render_gl::Program::from_shaders(
-            gl,
-            &[background_vert_shader_g, background_frag_shader_g],
-        )
-        .map_err(|msg| render_gl::Error::LinkError {
-            message: msg,
-            name: "mid_program_g".to_string(),
-        })?;
-        let mid_program_b = render_gl::Program::from_shaders(
-            gl,
-            &[background_vert_shader_b, background_frag_shader_b],
-        )
-        .map_err(|msg| render_gl::Error::LinkError {
-            message: msg,
-            name: "mid_program_b".to_string(),
-        })?;
+        let mid_program_r =
+            Program::from_shaders(gl, &[background_vert_shader_r, background_frag_shader_r])
+                .map_err(|msg| Error::LinkError {
+                    message: msg,
+                    name: "mid_program_r".to_string(),
+                })?;
+        let mid_program_g =
+            Program::from_shaders(gl, &[background_vert_shader_g, background_frag_shader_g])
+                .map_err(|msg| Error::LinkError {
+                    message: msg,
+                    name: "mid_program_g".to_string(),
+                })?;
+        let mid_program_b =
+            Program::from_shaders(gl, &[background_vert_shader_b, background_frag_shader_b])
+                .map_err(|msg| Error::LinkError {
+                    message: msg,
+                    name: "mid_program_b".to_string(),
+                })?;
 
         let frame_buffer = FrameBuffer::new(gl);
 
@@ -276,7 +280,7 @@ impl Background {
     fn render_pass(
         &self,
         gl: &gl::Gl,
-        program: &render_gl::Program,
+        program: &Program,
         frame_buffer: &FrameBuffer,
         texture_buffer: &Texture,
         view_matrix: &na::Matrix4<f32>,

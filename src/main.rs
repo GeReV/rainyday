@@ -21,7 +21,7 @@ use crate::debug::failure_to_string;
 use crate::droplet::Droplet;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
-use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture};
+use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, Viewport};
 use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
@@ -48,9 +48,20 @@ const MAX_DROPLET_COUNT: usize = 10_000;
 
 const DROPLETS_PER_SECOND: usize = 50;
 
+const VIEW_DISTANCE: f32 = 10.0;
+
 const DROPLET_SIZE_GRAVITY_THRESHOLD: f32 = 5.0;
 const PRIVATE_GRAVITY_FORCE_FACTOR_Y: f32 = 0.25;
 const PRIVATE_GRAVITY_FORCE_FACTOR_X: f32 = 0.0;
+
+const DROP_VERT: &str = include_str!("../assets/shaders/drop.vert");
+const DROP_FRAG: &str = include_str!("../assets/shaders/drop.frag");
+const DROP_WIPE_VERT: &str = include_str!("../assets/shaders/drop_wipe.vert");
+const DROP_WIPE_FRAG: &str = include_str!("../assets/shaders/drop_wipe.frag");
+const COLORED_QUAD_VERT: &str = include_str!("../assets/shaders/colored_quad.vert");
+const COLORED_QUAD_FRAG: &str = include_str!("../assets/shaders/colored_quad.frag");
+const QUAD_VERT: &str = include_str!("../assets/shaders/quad.vert");
+const FINAL_FRAG: &str = include_str!("../assets/shaders/final.frag");
 
 fn main() {
     if let Err(e) = run() {
@@ -99,57 +110,40 @@ fn run() -> Result<(), failure::Error> {
         video_subsystem.gl_get_proc_address(s) as _
     });
 
-    let mut viewport =
-        render_gl::Viewport::for_window(initial_window_size.0, initial_window_size.1);
+    let window_size = window.size();
 
-    let distance = 10.0;
+    let mut viewport = Viewport::for_window(window_size.0 as i32, window_size.1 as i32);
 
     let view: na::Matrix4<f32> = (na::Translation3::<f32>::from(na::Point3::origin().coords)
-        * na::Translation3::<f32>::from(na::Vector3::z() * distance))
+        * na::Translation3::<f32>::from(na::Vector3::z() * VIEW_DISTANCE))
     .inverse()
     .to_homogeneous();
 
     let mut projection = na::Orthographic3::new(
         0.0,
-        initial_window_size.0 as f32,
+        window_size.0 as f32,
         0.0,
-        initial_window_size.1 as f32,
+        window_size.1 as f32,
         0.01,
         1000.0,
     );
 
     let matrix = projection.into_inner() * view;
 
-    let background_texture = render_gl::Texture::from_res_rgb("textures/background.jpg")
+    let background_texture = Texture::from_res_rgb("textures/background.jpg")
         .with_gen_mipmaps()
         .load(&gl, &res)?;
 
     let texture_rc = Rc::<Texture>::new(background_texture);
 
-    let texture_buffer = Texture::new(
-        &gl,
-        initial_window_size.0 as u32,
-        initial_window_size.1 as u32,
-    )?;
+    let frame_buffer = FrameBuffer::new(&gl);
 
-    let frame_buffer = render_gl::FrameBuffer::new(&gl);
-
-    let background = background::Background::new(
-        &res,
-        &gl,
-        texture_rc.clone(),
-        initial_window_size.0 as u32,
-        initial_window_size.1 as u32,
-        1.0,
-    )?;
+    let background =
+        background::Background::new(&gl, texture_rc.clone(), window_size.0, window_size.1, 1.0)?;
 
     let quad = Quad::default(&gl);
 
     viewport.set_used(&gl);
-
-    let color_buffer = render_gl::ColorBuffer::from_rgb(0.3, 0.3, 0.5);
-
-    color_buffer.set_used(&gl);
 
     let mut event_pump = sdl.event_pump().map_err(err_msg)?;
 
@@ -167,16 +161,47 @@ fn run() -> Result<(), failure::Error> {
         gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
     }
 
-    let mut instant = Instant::now();
+    let drop_program = render_gl::Program::from_shaders(
+        &gl,
+        &[
+            Shader::from_vert_source_str(&gl, DROP_VERT)?,
+            Shader::from_frag_source_str(&gl, DROP_FRAG)?,
+        ],
+    )
+    .map_err(|msg| Error::LinkError {
+        message: msg,
+        name: "drop".to_string(),
+    })?;
 
-    let drop_program = render_gl::Program::from_res(&gl, &res, "shaders/drop")?;
-    let drop_wipe_program = Program::from_res(&gl, &res, "shaders/drop_wipe")?;
-    let colored_quad_program = Program::from_res(&gl, &res, "shaders/colored_quad")?;
+    let drop_wipe_program = Program::from_shaders(
+        &gl,
+        &[
+            Shader::from_vert_source_str(&gl, DROP_WIPE_VERT)?,
+            Shader::from_frag_source_str(&gl, DROP_WIPE_FRAG)?,
+        ],
+    )
+    .map_err(|msg| Error::LinkError {
+        message: msg,
+        name: "drop_wipe".to_string(),
+    })?;
+
+    let colored_quad_program = Program::from_shaders(
+        &gl,
+        &[
+            Shader::from_vert_source_str(&gl, COLORED_QUAD_VERT)?,
+            Shader::from_frag_source_str(&gl, COLORED_QUAD_FRAG)?,
+        ],
+    )
+    .map_err(|msg| Error::LinkError {
+        message: msg,
+        name: "colored_quad".to_string(),
+    })?;
+
     let final_program = Program::from_shaders(
         &gl,
         &[
-            Shader::from_res(&gl, &res, "shaders/quad.vert")?,
-            Shader::from_res(&gl, &res, "shaders/final.frag")?,
+            Shader::from_vert_source_str(&gl, QUAD_VERT)?,
+            Shader::from_frag_source_str(&gl, FINAL_FRAG)?,
         ],
     )
     .map_err(|msg| Error::LinkError {
@@ -193,25 +218,12 @@ fn run() -> Result<(), failure::Error> {
     let mut time_accumulator: f64 = 0.;
     let mut droplets_accumulator: usize = DROPLETS_PER_SECOND;
 
-    let background_mask = Texture::new(
-        &gl,
-        initial_window_size.0 as u32,
-        initial_window_size.1 as u32,
-    )?;
+    let background_mask = Texture::new(&gl, window_size.0 as u32, window_size.1 as u32)?;
 
-    let background_tex = Texture::new(
-        &gl,
-        initial_window_size.0 as u32,
-        initial_window_size.1 as u32,
-    )?;
+    let background_tex = Texture::new(&gl, window_size.0 as u32, window_size.1 as u32)?;
 
-    let fullscreen_quad = Quad::new_with_size(
-        &gl,
-        0.0,
-        0.0,
-        initial_window_size.1 as f32,
-        initial_window_size.0 as f32,
-    );
+    let fullscreen_quad =
+        Quad::new_with_size(&gl, 0.0, 0.0, window_size.1 as f32, window_size.0 as f32);
 
     let black = ColorBuffer::from_rgba(0.0, 0.0, 0.0, 1.0);
 
@@ -225,7 +237,22 @@ fn run() -> Result<(), failure::Error> {
         frame_buffer.unbind();
     }
 
+    let mut resolution: Vector2<f32> = Vector2::new(viewport.w as f32, viewport.h as f32);
+
+    let mut instant = Instant::now();
     'main: loop {
+        let now = Instant::now();
+        let delta = now.duration_since(instant);
+        instant = now;
+
+        time_accumulator += delta.as_secs_f64();
+
+        if time_accumulator > 1.0 {
+            time_accumulator -= 1.0;
+
+            droplets_accumulator += DROPLETS_PER_SECOND;
+        }
+
         for event in event_pump.poll_iter() {
             imgui_sdl2.handle_event(&mut imgui, &event);
             if imgui_sdl2.ignore_event(&event) {
@@ -244,16 +271,14 @@ fn run() -> Result<(), failure::Error> {
 
                     projection.set_left_and_right(0.0, w as f32);
                     projection.set_bottom_and_top(0.0, h as f32);
+
+                    resolution = Vector2::new(viewport.w as f32, viewport.h as f32);
                 }
                 _ => {}
             }
         }
 
         imgui_sdl2.prepare_frame(imgui.io_mut(), &window, &event_pump.mouse_state());
-
-        let now = Instant::now();
-        let delta = now.duration_since(instant);
-        instant = now;
 
         imgui.io_mut().delta_time = delta.as_secs_f32();
 
@@ -264,135 +289,118 @@ fn run() -> Result<(), failure::Error> {
         }
         frames.push_back(ui.io().framerate);
 
-        let w = imgui::Window::new(imgui::im_str!("FPS"))
-            .opened(&mut opened)
-            .position([20.0, 20.0], imgui::Condition::Appearing)
-            .always_auto_resize(true);
-        w.build(&ui, || {
-            let values = frames.iter().copied().collect::<Vec<f32>>();
-
-            ui.text(&imgui::im_str!(
-                "FPS: {:.1} ({:.1}ms)",
-                ui.io().framerate,
-                ui.io().delta_time * 1000.0
-            ));
-            imgui::PlotHistogram::new(&ui, imgui::im_str!(""), &values)
-                .scale_max(150.0)
-                .scale_min(0.0)
-                .graph_size([220.0, 60.0])
-                .build();
-            ui.text(&imgui::im_str!("Drops: {}", droplets.used_count()));
-            ui.text(&imgui::im_str!("Time accumulator: {:.2}", time_accumulator));
-            ui.text(&imgui::im_str!("Drops budget: {}", droplets_accumulator));
-        });
-
-        let resolution: na::Vector2<f32> =
-            na::Vector2::<f32>::new(viewport.w as f32, viewport.h as f32);
-
-        gravity_non_linear(&mut droplets, &mut world, &mut rng, &delta);
-
-        trail(
-            &mut droplets,
-            &mut world,
-            &mut rng,
-            &collision_group,
-            &contacts_query,
-            &delta,
+        prepare_ui(
+            &ui,
+            &mut opened,
+            &frames,
+            droplets.used_count(),
+            droplets_accumulator,
         );
 
-        updates.clear();
+        // Updates
+        {
+            gravity_non_linear(&mut droplets, &mut world, &mut rng, &delta);
 
-        // We get an "allowance" of DROPLETS_PER_SECOND every second.
-        // This part of the loop will attempt to spend them at random times, and is more likely to
-        // spend them the more time has past.
-        // TODO: Any better way to spend these more evenly?
-        // TODO: What happens when budget > fps?
-        if droplets_accumulator > 0 && rng.gen_bool(time_accumulator.max(0.0).min(1.0)) {
-            if let Some((i, d)) = droplets.checkout() {
-                d.pos = na::Vector2::new(
-                    rng.gen_range(0.0, viewport.w as f32),
-                    rng.gen_range(0.0, viewport.h as f32),
-                );
-                d.size = rng.gen_range(3.0, 8.0);
+            trail(
+                &mut droplets,
+                &mut world,
+                &mut rng,
+                &collision_group,
+                &contacts_query,
+                &delta,
+            );
 
-                let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
+            updates.clear();
 
-                let handle = world
-                    .add(
-                        Isometry2::new(d.pos.clone_owned(), na::zero()),
-                        shape_handle,
-                        collision_group,
-                        contacts_query,
-                        i,
-                    )
-                    .0;
+            // We get an "allowance" of DROPLETS_PER_SECOND every second.
+            // This part of the loop will attempt to spend them at random times, and is more likely to
+            // spend them the more time has past.
+            // TODO: Any better way to spend these more evenly?
+            // TODO: What happens when budget > fps?
+            if droplets_accumulator > 0 && rng.gen_bool(time_accumulator.max(0.0).min(1.0)) {
+                if let Some((i, d)) = droplets.checkout() {
+                    d.pos = na::Vector2::new(
+                        rng.gen_range(0.0, viewport.w as f32),
+                        rng.gen_range(0.0, viewport.h as f32),
+                    );
+                    d.size = rng.gen_range(3.0, 8.0);
 
-                d.collision_handle = handle;
+                    let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
 
-                droplets_accumulator -= 1;
-            }
-        }
+                    let handle = world
+                        .add(
+                            Isometry2::new(d.pos.clone_owned(), na::zero()),
+                            shape_handle,
+                            collision_group,
+                            contacts_query,
+                            i,
+                        )
+                        .0;
 
-        for ev in world.proximity_events().iter().collect::<Vec<_>>() {
-            if ev.new_status == Proximity::Intersecting {
-                if let (Some(obj1), Some(obj2)) = (
-                    world.collision_object(ev.collider1),
-                    world.collision_object(ev.collider2),
-                ) {
-                    let sphere1 = obj1.shape().local_bounding_sphere();
-                    let sphere2 = obj2.shape().local_bounding_sphere();
+                    d.collision_handle = handle;
 
-                    let rad1 = sphere1.radius();
-                    let rad2 = sphere2.radius();
-
-                    let pair = if rad1 > rad2 {
-                        (ev.collider1, ev.collider2)
-                    } else if rad1 < rad2 {
-                        (ev.collider2, ev.collider1)
-                    } else if sphere1.center().y > sphere2.center().y {
-                        (ev.collider1, ev.collider2)
-                    } else {
-                        (ev.collider2, ev.collider1)
-                    };
-
-                    updates.push(pair);
+                    droplets_accumulator -= 1;
                 }
             }
-        }
 
-        for (keep_handle, delete_handle) in updates.iter() {
-            if let (Some(keep), Some(delete)) =
-                world.collision_object_pair_mut(*keep_handle, *delete_handle)
-            {
-                let keep_droplet_index = *keep.data();
-                let delete_droplet_index = *delete.data();
+            for ev in world.proximity_events().iter().collect::<Vec<_>>() {
+                if ev.new_status == Proximity::Intersecting {
+                    if let (Some(obj1), Some(obj2)) = (
+                        world.collision_object(ev.collider1),
+                        world.collision_object(ev.collider2),
+                    ) {
+                        let sphere1 = obj1.shape().local_bounding_sphere();
+                        let sphere2 = obj2.shape().local_bounding_sphere();
 
-                let delete_droplet_size = droplets[delete_droplet_index].size;
+                        let rad1 = sphere1.radius();
+                        let rad2 = sphere2.radius();
 
-                let keep_droplet = &mut droplets[keep_droplet_index];
+                        let pair = if rad1 > rad2 {
+                            (ev.collider1, ev.collider2)
+                        } else if rad1 < rad2 {
+                            (ev.collider2, ev.collider1)
+                        } else if sphere1.center().y > sphere2.center().y {
+                            (ev.collider1, ev.collider2)
+                        } else {
+                            (ev.collider2, ev.collider1)
+                        };
 
-                // TODO: How much does a droplet grow when is absorbs another?
-                keep_droplet.size = ((keep_droplet.size * 0.5).powf(3.0)
-                    + (delete_droplet_size * 0.5).powf(3.0))
-                .cbrt()
-                    * 2.0;
-
-                keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size * 0.5)));
+                        updates.push(pair);
+                    }
+                }
             }
-        }
 
-        for (_, delete_handle) in updates.iter() {
-            if let Some(delete) = world.collision_object(*delete_handle) {
-                droplets.free(*delete.data());
-                world.remove(&[*delete_handle]);
+            for (keep_handle, delete_handle) in updates.iter() {
+                if let (Some(keep), Some(delete)) =
+                    world.collision_object_pair_mut(*keep_handle, *delete_handle)
+                {
+                    let keep_droplet_index = *keep.data();
+                    let delete_droplet_index = *delete.data();
+
+                    let delete_droplet_size = droplets[delete_droplet_index].size;
+
+                    let keep_droplet = &mut droplets[keep_droplet_index];
+
+                    // TODO: How much does a droplet grow when is absorbs another?
+                    keep_droplet.size = ((keep_droplet.size * 0.5).powf(3.0)
+                        + (delete_droplet_size * 0.5).powf(3.0))
+                    .cbrt()
+                        * 2.0;
+
+                    keep.set_shape(ShapeHandle::new(Ball::new(keep_droplet.size * 0.5)));
+                }
+            }
+
+            for (_, delete_handle) in updates.iter() {
+                if let Some(delete) = world.collision_object(*delete_handle) {
+                    droplets.free(*delete.data());
+                    world.remove(&[*delete_handle]);
+                }
             }
         }
 
         // Background pass
         {
-            let resolution =
-                Vector2::new(initial_window_size.0 as f32, initial_window_size.1 as f32);
-
             background.prepass(&gl, &view, &matrix, &resolution);
 
             frame_buffer.bind();
@@ -503,17 +511,38 @@ fn run() -> Result<(), failure::Error> {
         renderer.render(ui);
 
         window.gl_swap_window();
-
-        time_accumulator += delta.as_secs_f64();
-
-        if time_accumulator > 1.0 {
-            time_accumulator -= 1.0;
-
-            droplets_accumulator += DROPLETS_PER_SECOND;
-        }
     }
 
     Ok(())
+}
+
+fn prepare_ui(
+    ui: &imgui::Ui,
+    opened: &mut bool,
+    frames: &VecDeque<f32>,
+    droplets_used_count: usize,
+    droplets_accumulator: usize,
+) {
+    let w = imgui::Window::new(imgui::im_str!("FPS"))
+        .opened(opened)
+        .position([20.0, 20.0], imgui::Condition::Appearing)
+        .always_auto_resize(true);
+    w.build(&ui, || {
+        let values = frames.iter().copied().collect::<Vec<f32>>();
+
+        ui.text(&imgui::im_str!(
+            "FPS: {:.1} ({:.1}ms)",
+            ui.io().framerate,
+            ui.io().delta_time * 1000.0
+        ));
+        imgui::PlotHistogram::new(&ui, imgui::im_str!(""), &values)
+            .scale_max(150.0)
+            .scale_min(0.0)
+            .graph_size([220.0, 60.0])
+            .build();
+        ui.text(&imgui::im_str!("Drops: {}", droplets_used_count));
+        ui.text(&imgui::im_str!("Drops budget: {}", droplets_accumulator));
+    });
 }
 
 fn render_droplets(gl: &gl::Gl, quad: &Quad, droplets: &Droplets) {

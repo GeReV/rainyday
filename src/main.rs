@@ -27,24 +27,17 @@ use crate::debug_ui::DebugUi;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
 use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, Viewport};
-use crate::vertex::Vertex;
 use failure::err_msg;
 use nalgebra as na;
-use nalgebra::{Isometry2, Point2, Vector2, Vector3};
-use ncollide2d as nc;
-use ncollide2d::bounding_volume::BoundingSphere;
-use ncollide2d::broad_phase::{BroadPhase, DBVTBroadPhase};
+use nalgebra::{Isometry2, Vector2};
 use ncollide2d::pipeline::{
-    default_narrow_phase, BallBallManifoldGenerator, BallBallProximityDetector, CollisionGroups,
-    CollisionObject, CollisionObjectSlabHandle, CollisionWorld, ContactEvent, GeometricQueryType,
-    NarrowPhase,
+    CollisionGroups, CollisionObjectSlabHandle, CollisionWorld, GeometricQueryType,
 };
 use ncollide2d::query::Proximity;
 use ncollide2d::shape::{Ball, ShapeHandle};
 use rand::prelude::*;
 use render_gl::buffer::*;
 use resources::Resources;
-use std::collections::VecDeque;
 use std::env;
 use std::path::Path;
 use std::rc::Rc;

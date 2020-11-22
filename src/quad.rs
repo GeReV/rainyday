@@ -1,9 +1,6 @@
-﻿use crate::render_gl::{self, buffer, data};
-use crate::resources::Resources;
+﻿use crate::render_gl::buffer;
 use crate::vertex::Vertex;
-use failure;
 use gl;
-use nalgebra as na;
 
 pub struct Quad {
     _vbo: buffer::ArrayBuffer,

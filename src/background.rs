@@ -1,6 +1,5 @@
 ﻿use crate::quad;
-use crate::render_gl::{self, buffer, data, Error, FrameBuffer, Program, Shader, Texture};
-use crate::resources::Resources;
+use crate::render_gl::{Error, FrameBuffer, Program, Shader, Texture};
 use failure;
 use gl;
 use nalgebra as na;

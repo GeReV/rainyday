@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 extern crate gl;
 extern crate sdl2;
 #[macro_use]
@@ -40,6 +42,7 @@ use rand::prelude::*;
 use render_gl::buffer::*;
 use resources::Resources;
 use std::collections::VecDeque;
+use std::env;
 use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -64,8 +67,22 @@ const QUAD_VERT: &str = include_str!("../assets/shaders/quad.vert");
 const FINAL_FRAG: &str = include_str!("../assets/shaders/final.frag");
 
 fn main() {
-    if let Err(e) = run() {
-        println!("{}", failure_to_string(e));
+    let args: Vec<String> = env::args().collect();
+
+    let arg = args.get(0);
+
+    match &arg.unwrap_or(&"/s".to_string())[..] {
+        "/p" => {
+            // Preview, parse hwnd from second argument
+        }
+        "/c" => {
+            // Configuration
+        }
+        "/s" | _ => {
+            if let Err(e) = run() {
+                println!("{}", failure_to_string(e));
+            }
+        }
     }
 }
 

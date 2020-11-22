@@ -12,6 +12,8 @@ extern crate rand;
 
 mod background;
 mod debug;
+#[cfg(debug_assertions)]
+mod debug_ui;
 mod droplet;
 mod droplets;
 mod quad;
@@ -20,7 +22,8 @@ pub mod resources;
 mod vertex;
 
 use crate::debug::failure_to_string;
-use crate::droplet::Droplet;
+#[cfg(debug_assertions)]
+use crate::debug_ui::DebugUi;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
 use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, Viewport};
@@ -118,15 +121,6 @@ fn run() -> Result<(), failure::Error> {
         video_subsystem.gl_get_proc_address(s) as *const std::os::raw::c_void
     });
 
-    let mut imgui = imgui::Context::create();
-    imgui.set_ini_filename(None);
-
-    let mut imgui_sdl2 = imgui_sdl2::ImguiSdl2::new(&mut imgui, &window);
-
-    let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui, |s| {
-        video_subsystem.gl_get_proc_address(s) as _
-    });
-
     let window_size = window.size();
 
     let mut viewport = Viewport::for_window(window_size.0 as i32, window_size.1 as i32);
@@ -172,6 +166,9 @@ fn run() -> Result<(), failure::Error> {
 
     let collision_group = CollisionGroups::new();
     let contacts_query = GeometricQueryType::Proximity(0.0);
+
+    #[cfg(debug_assertions)]
+    let mut debug_ui = DebugUi::new(&window);
 
     unsafe {
         gl.Enable(gl::BLEND);
@@ -228,10 +225,6 @@ fn run() -> Result<(), failure::Error> {
 
     let mut updates = Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new();
 
-    let mut opened = true;
-
-    let mut frames: VecDeque<f32> = VecDeque::with_capacity(100);
-
     let mut time_accumulator: f64 = 0.;
     let mut droplets_accumulator: usize = DROPLETS_PER_SECOND;
 
@@ -271,9 +264,13 @@ fn run() -> Result<(), failure::Error> {
         }
 
         for event in event_pump.poll_iter() {
-            imgui_sdl2.handle_event(&mut imgui, &event);
-            if imgui_sdl2.ignore_event(&event) {
-                continue;
+            #[cfg(debug_assertions)]
+            {
+                debug_ui.handle_event(&event);
+
+                if debug_ui.ignore_event(&event) {
+                    continue;
+                }
             }
 
             match event {
@@ -294,25 +291,6 @@ fn run() -> Result<(), failure::Error> {
                 _ => {}
             }
         }
-
-        imgui_sdl2.prepare_frame(imgui.io_mut(), &window, &event_pump.mouse_state());
-
-        imgui.io_mut().delta_time = delta.as_secs_f32();
-
-        let ui = imgui.frame();
-
-        if frames.len() == 100 {
-            frames.pop_front();
-        }
-        frames.push_back(ui.io().framerate);
-
-        prepare_ui(
-            &ui,
-            &mut opened,
-            &frames,
-            droplets.used_count(),
-            droplets_accumulator,
-        );
 
         // Updates
         {
@@ -524,42 +502,19 @@ fn run() -> Result<(), failure::Error> {
             render_droplets(&gl, &quad, &droplets);
         }
 
-        imgui_sdl2.prepare_render(&ui, &window);
-        renderer.render(ui);
+        #[cfg(debug_assertions)]
+        debug_ui.render(
+            &window,
+            &event_pump.mouse_state(),
+            &delta,
+            droplets.used_count(),
+            droplets_accumulator,
+        );
 
         window.gl_swap_window();
     }
 
     Ok(())
-}
-
-fn prepare_ui(
-    ui: &imgui::Ui,
-    opened: &mut bool,
-    frames: &VecDeque<f32>,
-    droplets_used_count: usize,
-    droplets_accumulator: usize,
-) {
-    let w = imgui::Window::new(imgui::im_str!("FPS"))
-        .opened(opened)
-        .position([20.0, 20.0], imgui::Condition::Appearing)
-        .always_auto_resize(true);
-    w.build(&ui, || {
-        let values = frames.iter().copied().collect::<Vec<f32>>();
-
-        ui.text(&imgui::im_str!(
-            "FPS: {:.1} ({:.1}ms)",
-            ui.io().framerate,
-            ui.io().delta_time * 1000.0
-        ));
-        imgui::PlotHistogram::new(&ui, imgui::im_str!(""), &values)
-            .scale_max(150.0)
-            .scale_min(0.0)
-            .graph_size([220.0, 60.0])
-            .build();
-        ui.text(&imgui::im_str!("Drops: {}", droplets_used_count));
-        ui.text(&imgui::im_str!("Drops budget: {}", droplets_accumulator));
-    });
 }
 
 fn render_droplets(gl: &gl::Gl, quad: &Quad, droplets: &Droplets) {

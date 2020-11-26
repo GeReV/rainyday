@@ -109,7 +109,8 @@ fn run() -> Result<(), failure::Error> {
             initial_window_size.0 as u32,
             initial_window_size.1 as u32,
         )
-        .position_centered() //        .fullscreen_desktop()
+        .position_centered()
+        .fullscreen_desktop()
         .opengl()
         .resizable()
         .allow_highdpi()

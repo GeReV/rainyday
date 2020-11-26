@@ -162,30 +162,8 @@ impl Background {
         let program_projection_location = program.get_uniform_location("Projection");
         let resolution_location = program.get_uniform_location("Resolution");
 
-        let texture_dimensions = texture.dimensions();
-
-        let ratios = (
-            screen_width as f32 / texture_dimensions.0 as f32,
-            screen_height as f32 / texture_dimensions.1 as f32,
-        );
-
-        let target_dimensions = if ratios.0 < ratios.1 {
-            (texture_dimensions.0 as f32 * ratios.1, screen_height as f32)
-        } else {
-            (screen_width as f32, texture_dimensions.1 as f32 * ratios.0)
-        };
-
-        let offsets = (
-            (target_dimensions.0 - screen_width as f32) / 2.0,
-            (target_dimensions.1 - screen_height as f32) / 2.0,
-        );
-
-        let bottom = -offsets.1;
-        let left = -offsets.0;
-        let top = target_dimensions.1 - offsets.1;
-        let right = target_dimensions.0 - offsets.0;
-
-        let quad = quad::Quad::new_with_size(gl, bottom, left, top, right);
+        let quad =
+            quad::Quad::new_with_size(gl, 0.0, 0.0, screen_height as f32, screen_width as f32);
 
         let mid_buffer_r = Texture::new(gl, screen_width, screen_height)?;
         let mid_buffer_g = Texture::new(gl, screen_width, screen_height)?;

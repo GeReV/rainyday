@@ -148,7 +148,41 @@ fn run() -> Result<(), failure::Error> {
             let mut options = TextureLoadOptions::from_res_rgb(&path);
             options.gen_mipmaps = true;
 
-            let image = image::open(&path)?;
+            let mut image = image::open(&path)?;
+
+            let texture_dimensions = image.dimensions();
+            let (screen_width, screen_height) = window_size;
+
+            let screen_ratio = screen_width as f32 / screen_height as f32;
+            let texture_ratio = texture_dimensions.0 as f32 / texture_dimensions.1 as f32;
+
+            let target_dimensions = if screen_ratio < texture_ratio {
+                let ratio = screen_ratio / texture_ratio;
+                (
+                    texture_dimensions.0 as f32 * ratio,
+                    texture_dimensions.1 as f32,
+                )
+            } else {
+                let ratio = texture_ratio / screen_ratio;
+                (
+                    texture_dimensions.0 as f32,
+                    texture_dimensions.1 as f32 * ratio,
+                )
+            };
+
+            let offsets = (
+                (texture_dimensions.0 as f32 - target_dimensions.0) * 0.5,
+                (texture_dimensions.1 as f32 - target_dimensions.1) * 0.5,
+            );
+
+            dbg!(offsets);
+
+            let x = offsets.0;
+            let y = offsets.1;
+            let width = texture_dimensions.0 as f32 - offsets.0;
+            let height = texture_dimensions.1 as f32 - offsets.1;
+
+            let image = image.crop(x as u32, y as u32, (width - x) as u32, (height - y) as u32);
 
             Texture::from_image(options, &gl, &image)?
         }
@@ -242,7 +276,7 @@ fn run() -> Result<(), failure::Error> {
 
     let background_mask = Texture::new(&gl, window_size.0 as u32, window_size.1 as u32)?;
 
-    let background_tex = Texture::new(&gl, window_size.0 as u32, window_size.1 as u32)?;
+    let background_tex = Texture::new(&gl, window_size.0, window_size.1)?;
 
     let fullscreen_quad =
         Quad::new_with_size(&gl, 0.0, 0.0, window_size.1 as f32, window_size.0 as f32);

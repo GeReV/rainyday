@@ -2,6 +2,7 @@ use crate::resources::Resources;
 use failure;
 use gl;
 use std::os::raw;
+use std::path::Path;
 
 pub struct TextureLoadOptions<'a> {
     resource_name: &'a str,
@@ -136,6 +137,122 @@ impl Texture {
         };
 
         texture.update(options, res)?;
+
+        Ok(texture)
+    }
+
+    pub fn from_image(
+        options: TextureLoadOptions,
+        gl: &gl::Gl,
+        image: &image::DynamicImage,
+    ) -> Result<Texture, failure::Error> {
+        let mut obj: gl::types::GLuint = 0;
+        unsafe {
+            gl.GenTextures(1, &mut obj);
+        }
+
+        let mut texture = Texture {
+            gl: gl.clone(),
+            obj,
+            width: 0,
+            height: 0,
+        };
+
+        unsafe {
+            gl.BindTexture(gl::TEXTURE_2D, texture.obj);
+        }
+
+        // https://www.khronos.org/opengl/wiki/Common_Mistakes
+
+        match options.format {
+            gl::RGB => {
+                let img = image.flipv().to_rgb();
+
+                let dims = img.dimensions();
+
+                texture.width = dims.0;
+                texture.height = dims.1;
+
+                if options.gen_mipmaps {
+                    unsafe {
+                        gl.TexImage2D(
+                            gl::TEXTURE_2D,
+                            0,
+                            gl::RGB8 as gl::types::GLint,
+                            img.width() as i32,
+                            img.height() as i32,
+                            0,
+                            gl::RGB,
+                            gl::UNSIGNED_BYTE,
+                            img.as_ptr() as *const raw::c_void,
+                        );
+                        gl.GenerateMipmap(gl::TEXTURE_2D);
+                    }
+                } else {
+                    unsafe {
+                        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_BASE_LEVEL, 0);
+                        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
+                        gl.TexImage2D(
+                            gl::TEXTURE_2D,
+                            0,
+                            gl::RGB8 as gl::types::GLint,
+                            img.width() as i32,
+                            img.height() as i32,
+                            0,
+                            gl::RGB,
+                            gl::UNSIGNED_BYTE,
+                            img.as_ptr() as *const raw::c_void,
+                        );
+                    }
+                }
+            }
+            gl::RGBA => {
+                let img = image.flipv().to_rgba();
+
+                let dims = img.dimensions();
+
+                texture.width = dims.0;
+                texture.height = dims.1;
+
+                if options.gen_mipmaps {
+                    unsafe {
+                        gl.TexImage2D(
+                            gl::TEXTURE_2D,
+                            0,
+                            gl::RGBA8 as gl::types::GLint,
+                            img.width() as i32,
+                            img.height() as i32,
+                            0,
+                            gl::RGBA,
+                            gl::UNSIGNED_BYTE,
+                            img.as_ptr() as *const raw::c_void,
+                        );
+                        gl.GenerateMipmap(gl::TEXTURE_2D);
+                    }
+                } else {
+                    unsafe {
+                        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_BASE_LEVEL, 0);
+                        gl.TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
+                        gl.TexImage2D(
+                            gl::TEXTURE_2D,
+                            0,
+                            gl::RGBA8 as gl::types::GLint,
+                            img.width() as i32,
+                            img.height() as i32,
+                            0,
+                            gl::RGBA,
+                            gl::UNSIGNED_BYTE,
+                            img.as_ptr() as *const raw::c_void,
+                        );
+                    }
+                }
+            }
+            _ => unreachable!("Only RGB or RGBA images can be constructed"),
+        }
+
+        unsafe {
+            gl.BindTexture(gl::TEXTURE_2D, 0);
+        }
 
         Ok(texture)
     }

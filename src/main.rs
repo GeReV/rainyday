@@ -11,6 +11,8 @@ extern crate ncollide2d;
 extern crate rand;
 
 mod background;
+mod config;
+mod config_window;
 mod debug;
 #[cfg(feature = "debug")]
 mod debug_ui;
@@ -21,12 +23,16 @@ pub mod render_gl;
 pub mod resources;
 mod vertex;
 
+use crate::config::Config;
+use crate::config_window::ConfigWindow;
 use crate::debug::failure_to_string;
 #[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
-use crate::render_gl::{ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, Viewport};
+use crate::render_gl::{
+    ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, TextureLoadOptions, Viewport,
+};
 use failure::err_msg;
 use nalgebra as na;
 use nalgebra::{Isometry2, Vector2};
@@ -63,7 +69,7 @@ const QUAD_VERT: &str = include_str!("../assets/shaders/quad.vert");
 const FINAL_FRAG: &str = include_str!("../assets/shaders/final.frag");
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().skip(1).collect();
 
     let arg = args.get(0);
 
@@ -73,6 +79,7 @@ fn main() {
         }
         "/c" => {
             // Configuration
+            ConfigWindow::init();
         }
         "/s" | _ => {
             if let Err(e) = run() {
@@ -134,9 +141,21 @@ fn run() -> Result<(), failure::Error> {
 
     let matrix = projection.into_inner() * view;
 
-    let background_texture = Texture::from_res_rgb("textures/background.jpg")
-        .with_gen_mipmaps()
-        .load(&gl, &res)?;
+    let config = Config::default();
+
+    let background_texture = match config.background() {
+        Some(path) => {
+            let mut options = TextureLoadOptions::from_res_rgb(&path);
+            options.gen_mipmaps = true;
+
+            let image = image::open(&path)?;
+
+            Texture::from_image(options, &gl, &image)?
+        }
+        None => Texture::from_res_rgb("textures/background.jpg")
+            .with_gen_mipmaps()
+            .load(&gl, &res)?,
+    };
 
     let texture_rc = Rc::<Texture>::new(background_texture);
 

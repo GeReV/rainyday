@@ -9,5 +9,5 @@ mod viewport;
 pub use self::color_buffer::ColorBuffer;
 pub use self::framebuffer::FrameBuffer;
 pub use self::shader::{Error, Program, Shader};
-pub use self::texture::Texture;
+pub use self::texture::{Texture, TextureLoadOptions};
 pub use self::viewport::Viewport;

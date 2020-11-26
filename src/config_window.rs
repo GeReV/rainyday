@@ -1,34 +1,15 @@
 ﻿extern crate native_windows_derive as nwd;
 extern crate native_windows_gui as nwg;
 
-use self::nwg::NwgError;
 use crate::config::Config;
 use nwd::NwgUi;
 use nwg::stretch::{
-    geometry::{Rect, Size},
-    style::{AlignItems, AlignSelf, Dimension as D, FlexDirection, JustifyContent},
+    geometry::Size,
+    style::{AlignItems, Dimension as D, FlexDirection},
 };
 use nwg::NativeUi;
 use std::cell::RefCell;
 use std::env;
-use std::io;
-
-const HKEY: &str = "SOFTWARE\\RainyDay";
-const BACKGROUND_KEY: &str = "Background";
-
-fn to_utf16(s: &str) -> Vec<u16> {
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
-
-    OsStr::new(s)
-        .encode_wide()
-        .chain(Some(0u16).into_iter())
-        .collect()
-}
-
-fn v16_to_v8(v: &[u16]) -> Vec<u8> {
-    unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, v.len() * 2).to_vec() }
-}
 
 #[derive(Default, NwgUi)]
 pub struct ConfigWindow {

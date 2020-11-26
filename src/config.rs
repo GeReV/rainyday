@@ -1,5 +1,4 @@
-﻿use ini::{Error, Ini};
-use std::path::Path;
+﻿use std::path::Path;
 
 const BACKGROUND_KEY: &str = "background";
 

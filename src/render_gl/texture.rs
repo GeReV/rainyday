@@ -2,7 +2,6 @@ use crate::resources::Resources;
 use failure;
 use gl;
 use std::os::raw;
-use std::path::Path;
 
 pub struct TextureLoadOptions<'a> {
     resource_name: &'a str,

@@ -74,7 +74,7 @@ fn main() {
 
     let arg = args.get(0);
 
-    match &arg.unwrap_or(&"/s".to_string())[..] {
+    match &arg.unwrap_or(&"/s".to_string()).to_ascii_lowercase()[..2] {
         "/p" => {
             // Preview, parse hwnd from second argument
         }
@@ -102,14 +102,8 @@ fn run() -> Result<(), failure::Error> {
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
     gl_attr.set_context_version(4, 5);
 
-    let initial_window_size: (i32, i32) = (1920, 1080);
-
     let window = video_subsystem
-        .window(
-            "Rain",
-            initial_window_size.0 as u32,
-            initial_window_size.1 as u32,
-        )
+        .window("Rain", 1920, 1080)
         .position_centered()
         .fullscreen_desktop()
         .opengl()
@@ -176,8 +170,6 @@ fn run() -> Result<(), failure::Error> {
                 (texture_dimensions.0 as f32 - target_dimensions.0) * 0.5,
                 (texture_dimensions.1 as f32 - target_dimensions.1) * 0.5,
             );
-
-            dbg!(offsets);
 
             let x = offsets.0;
             let y = offsets.1;

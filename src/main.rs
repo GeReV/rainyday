@@ -34,6 +34,7 @@ use crate::render_gl::{
     ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, TextureLoadOptions, Viewport,
 };
 use failure::err_msg;
+use image::GenericImageView;
 use nalgebra as na;
 use nalgebra::{Isometry2, Vector2};
 use ncollide2d::pipeline::{

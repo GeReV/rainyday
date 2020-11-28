@@ -15,6 +15,14 @@ fn main() {
         .expect("failed to find target dir")
         .join(env::var("PROFILE").unwrap());
 
+    // let executable_file = executable_path.join(env::var("CARGO_PKG_NAME").unwrap());
+    //
+    // fs::copy(
+    //     &executable_file.with_extension("exe"),
+    //     &executable_file.with_extension("scr"),
+    // )
+    // .expect("failed to copy");
+
     copy(
         &manifest_dir.join("assets"),
         &executable_path.join("assets"),

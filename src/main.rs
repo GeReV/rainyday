@@ -1,10 +1,11 @@
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 
 extern crate gl;
 #[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate render_gl_derive;
+extern crate msgbox;
 extern crate nalgebra;
 extern crate ncollide2d;
 extern crate rand;
@@ -41,61 +42,139 @@ use ncollide2d::pipeline::{
 use ncollide2d::query::Proximity;
 use ncollide2d::shape::{Ball, ShapeHandle};
 
+use crate::render_gl::ColorBuffer;
+use glutin::dpi::{PhysicalSize, Size};
+use glutin::event_loop::EventLoop;
+use glutin::window::Fullscreen;
+use glutin::{Context, ContextWrapper, GlRequest, PossiblyCurrent};
 use render_gl::buffer::*;
 use resources::Resources;
 use std::env;
 use std::path::Path;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 
 const MAX_DROPLET_COUNT: usize = 10_000;
 
 fn main() {
+    use glutin::event_loop::{ControlFlow, EventLoop};
+    use glutin::platform::windows::{RawContextExt, WindowBuilderExtWindows, WindowExtWindows};
+    use glutin::window::WindowBuilder;
+    use glutin::ContextBuilder;
+
     let args: Vec<String> = env::args().skip(1).collect();
 
-    let arg = args.get(0);
+    let arg = args
+        .get(0)
+        .unwrap_or(&"/s".to_string())
+        .to_ascii_lowercase();
 
-    match &arg.unwrap_or(&"/s".to_string()).to_ascii_lowercase()[..2] {
+    match &arg[..2] {
         "/p" => {
             // Preview, parse hwnd from second argument
+            let hwnd = {
+                let str_hwnd = args.get(1).unwrap();
+
+                usize::from_str(str_hwnd).unwrap()
+            };
+
+            let parent_hwnd = unsafe { std::mem::transmute(hwnd) };
+
+            let mut rect = winapi::shared::windef::RECT {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            };
+
+            unsafe {
+                if winapi::um::winuser::GetClientRect(parent_hwnd, &mut rect) == 0 {
+                    msgbox::create(
+                        "GetClientRect failed",
+                        format!("{}", winapi::um::errhandlingapi::GetLastError()).as_str(),
+                        msgbox::IconType::None,
+                    )
+                    .unwrap();
+                }
+            }
+
+            let el = EventLoop::new();
+
+            let mut wb = WindowBuilder::new()
+                .with_title("Rain")
+                .with_parent_window(parent_hwnd)
+                // .with_decorations(false)
+                .with_inner_size(Size::Physical(PhysicalSize::new(
+                    rect.right as u32,
+                    rect.bottom as u32,
+                )));
+
+            let window = wb.build(&el).unwrap();
+
+            let raw_context = unsafe {
+                let hwnd = window.hwnd();
+                let mut cb = ContextBuilder::new().with_gl(GlRequest::Latest);
+
+                cb.build_raw_context(hwnd).unwrap()
+            };
+
+            let raw_context = unsafe { raw_context.make_current().unwrap() };
+
+            if let Err(e) = run(window, el, raw_context) {
+                let err = failure_to_string(e);
+                println!("{}", err);
+
+                msgbox::create("error", err.as_str(), msgbox::IconType::None).unwrap();
+            }
+
+            msgbox::create("done", "done", msgbox::IconType::None).unwrap();
         }
         "/c" => {
+            let (_, hwnd) = arg.split_at(3);
+
+            dbg!(hwnd);
+
             // Configuration
             ConfigWindow::init();
         }
         "/s" | _ => {
-            if let Err(e) = run() {
+            let el = EventLoop::new();
+
+            let mut wb = WindowBuilder::new()
+                .with_title("Rain")
+                // .with_inner_size(Size::Physical(PhysicalSize::new(1920, 1080)));
+                .with_fullscreen(Some(Fullscreen::Borderless(None)));
+
+            let window = wb.build(&el).unwrap();
+
+            let raw_context = unsafe {
+                use glutin::platform::windows::{RawContextExt, WindowExtWindows};
+
+                let hwnd = window.hwnd();
+                let mut cb = ContextBuilder::new().with_gl(GlRequest::Latest);
+
+                cb.build_raw_context(hwnd).unwrap()
+            };
+
+            let raw_context = unsafe { raw_context.make_current().unwrap() };
+
+            if let Err(e) = run(window, el, raw_context) {
                 println!("{}", failure_to_string(e));
             }
         }
     }
 }
 
-fn run() -> Result<(), failure::Error> {
+fn run(
+    window: glutin::window::Window,
+    event_loop: EventLoop<()>,
+    context: ContextWrapper<PossiblyCurrent, ()>,
+) -> Result<(), failure::Error> {
     use glutin::event::{Event, WindowEvent};
-    use glutin::event_loop::{ControlFlow, EventLoop};
-    use glutin::window::WindowBuilder;
-    use glutin::ContextBuilder;
+    use glutin::event_loop::ControlFlow;
 
-    let res = Resources::from_relative_exe_path(Path::new("assets")).unwrap();
-
-    let el = EventLoop::new();
-    let mut wb = WindowBuilder::new()
-        .with_title("Rain")
-        .with_inner_size(Size::Physical(PhysicalSize::new(1920, 1080)));
-
-    let window = wb.build(&el)?;
-
-    let raw_context = unsafe {
-        use glutin::platform::windows::{RawContextExt, WindowExtWindows};
-
-        let hwnd = window.hwnd();
-        ContextBuilder::new().build_raw_context(hwnd)?
-    };
-
-    let raw_context = unsafe { raw_context.make_current().unwrap() };
-
-    let gl = gl::Gl::load_with(|s| raw_context.get_proc_address(s) as *const _);
+    let gl = gl::Gl::load_with(|s| context.get_proc_address(s) as *const _);
 
     let window_size = window.inner_size();
 
@@ -107,7 +186,7 @@ fn run() -> Result<(), failure::Error> {
         gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
     }
 
-    let mut raw_context = Option::from(raw_context);
+    let mut context = Option::from(context);
 
     let mut rain = rain::Rain::new(
         &gl,
@@ -119,7 +198,7 @@ fn run() -> Result<(), failure::Error> {
     let mut instant = Instant::now();
     let mut delta = Duration::default();
 
-    el.run(move |event, _, control_flow| {
+    event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
         // #[cfg(feature = "debug")]
@@ -141,21 +220,14 @@ fn run() -> Result<(), failure::Error> {
             }
             Event::MainEventsCleared => {
                 rain.update(&delta);
+
+                window.request_redraw();
             }
             Event::LoopDestroyed => {
-                raw_context.take(); // Make sure it drops first
+                context.take(); // Make sure it drops first
                 return;
             }
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::Resized(physical_size) => {
-                    // viewport.update_size(w, h);
-                    // viewport.set_used(&gl);
-                    //
-                    // projection.set_left_and_right(0.0, w as f32);
-                    // projection.set_bottom_and_top(0.0, h as f32);
-                    //
-                    // raw_context.resize(physical_size);
-                }
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                 _ => (),
             },
@@ -171,7 +243,7 @@ fn run() -> Result<(), failure::Error> {
                 //     droplets_accumulator,
                 // );
 
-                raw_context.as_ref().unwrap().swap_buffers().unwrap();
+                context.as_ref().unwrap().swap_buffers().unwrap();
             }
             _ => (),
         }

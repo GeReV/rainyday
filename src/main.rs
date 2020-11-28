@@ -80,7 +80,9 @@ fn run() -> Result<(), failure::Error> {
     let res = Resources::from_relative_exe_path(Path::new("assets")).unwrap();
 
     let el = EventLoop::new();
-    let mut wb = WindowBuilder::new().with_title("Rain");
+    let mut wb = WindowBuilder::new()
+        .with_title("Rain")
+        .with_inner_size(Size::Physical(PhysicalSize::new(1920, 1080)));
 
     let window = wb.build(&el)?;
 
@@ -158,7 +160,7 @@ fn run() -> Result<(), failure::Error> {
                 _ => (),
             },
             Event::RedrawRequested(_) => {
-                // rain.render(&delta);
+                rain.render(&delta);
 
                 // #[cfg(feature = "debug")]
                 // debug_ui.render(

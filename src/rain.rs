@@ -131,7 +131,7 @@ impl Rain {
                     let current_exe = std::env::current_exe().unwrap();
                     let mut dir = current_exe.parent().unwrap();
 
-                    dir.join("assets/background.jpg")
+                    dir.join("assets\\textures\\background.jpg")
                         .to_str()
                         .unwrap()
                         .to_string()
@@ -194,7 +194,7 @@ impl Rain {
 
         let final_program = load_shader(&gl, QUAD_VERT, FINAL_FRAG, "final");
 
-        let background_mask = Texture::new(&gl, window_size.0 as u32, window_size.1 as u32)?;
+        let background_mask = Texture::new(&gl, window_size.0, window_size.1)?;
 
         let background_buffer = Texture::new(&gl, window_size.0, window_size.1)?;
 

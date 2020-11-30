@@ -29,7 +29,7 @@ use crate::debug::failure_to_string;
 #[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
 
-use glutin::dpi::{PhysicalSize, Size};
+use glutin::dpi::{PhysicalPosition, PhysicalSize, Size};
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 use glutin::platform::windows::WindowBuilderExtWindows;
@@ -39,8 +39,14 @@ use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use winapi::shared::windef::HWND;
+use winapi::um::winuser::SPI_SCREENSAVERRUNNING;
 
 const MAX_DROPLET_COUNT: usize = 10_000;
+
+enum Mode {
+    Preview(HWND),
+    Normal,
+}
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
@@ -61,7 +67,7 @@ fn main() {
 
             let parent_hwnd = unsafe { std::mem::transmute(hwnd) };
 
-            if let Err(e) = run(Some(parent_hwnd), 500, (1.0, 5.0)) {
+            if let Err(e) = run(Mode::Preview(parent_hwnd), 500, (1.0, 5.0)) {
                 let err = failure_to_string(e);
                 println!("{}", err);
             }
@@ -73,15 +79,17 @@ fn main() {
             ConfigWindow::init();
         }
         "/s" | _ => {
-            if let Err(e) = run(None, MAX_DROPLET_COUNT, (3.0, 8.0)) {
+            if let Err(e) = run(Mode::Normal, MAX_DROPLET_COUNT, (3.0, 8.0)) {
                 println!("{}", failure_to_string(e));
             }
+
+            std::thread::sleep(Duration::from_secs(5));
         }
     }
 }
 
 fn run(
-    parent_hwnd: Option<HWND>,
+    mode: Mode,
     max_droplet_count: usize,
     droplet_size_range: (f32, f32),
 ) -> Result<(), failure::Error> {
@@ -89,8 +97,8 @@ fn run(
 
     let mut wb = WindowBuilder::new().with_title("Rain");
 
-    wb = match parent_hwnd {
-        Some(hwnd) => {
+    wb = match mode {
+        Mode::Preview(hwnd) => {
             let mut rect = winapi::shared::windef::RECT {
                 left: 0,
                 top: 0,
@@ -109,7 +117,9 @@ fn run(
                     rect.bottom as u32,
                 )))
         }
-        None => wb.with_fullscreen(Some(Fullscreen::Borderless(None))),
+        Mode::Normal => wb
+            .with_visible(false)
+            .with_fullscreen(Some(Fullscreen::Borderless(None))),
     };
 
     let window = wb.build(&event_loop).unwrap();
@@ -126,6 +136,13 @@ fn run(
     let raw_context = unsafe { raw_context.make_current().unwrap() };
 
     let gl = gl::Gl::load_with(|s| raw_context.get_proc_address(s) as *const _);
+
+    if let Mode::Normal = mode {
+        window.set_visible(true);
+        window.set_cursor_visible(false);
+
+        set_screensaver_running(true);
+    }
 
     let window_size = window.inner_size();
 
@@ -150,6 +167,9 @@ fn run(
     let mut instant = Instant::now();
     let mut delta = Duration::default();
 
+    let mut initial_mouse_position: Option<PhysicalPosition<f64>> = None;
+    let mut skipped_initial_keyboard_events = false;
+
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
@@ -171,6 +191,10 @@ fn run(
                 instant = now;
             }
             Event::MainEventsCleared => {
+                // For some reason, the first round of the loop comes with some initial keyboard events.
+                //  This flag is used to ignore them, until I can figure out why they're there in the first place.
+                skipped_initial_keyboard_events = true;
+
                 rain.update(&delta);
 
                 window.request_redraw();
@@ -180,7 +204,30 @@ fn run(
                 return;
             }
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::CursorMoved { position, .. } => match initial_mouse_position {
+                    Some(p) => {
+                        if (position.x - p.x).abs() > 50.0 || (position.y - p.y).abs() > 50.0 {
+                            *control_flow = ControlFlow::Exit;
+                        }
+                    }
+                    None => {
+                        initial_mouse_position = Some(position);
+                    }
+                },
+                WindowEvent::KeyboardInput { .. } => {
+                    if skipped_initial_keyboard_events {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
+                WindowEvent::MouseWheel { .. }
+                | WindowEvent::MouseInput { .. }
+                | WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+
+                    if let Mode::Normal = mode {
+                        set_screensaver_running(false);
+                    }
+                }
                 _ => (),
             },
             Event::RedrawRequested(_) => {
@@ -202,4 +249,15 @@ fn run(
     });
 
     Ok(())
+}
+
+fn set_screensaver_running(value: bool) {
+    unsafe {
+        winapi::um::winuser::SystemParametersInfoA(
+            SPI_SCREENSAVERRUNNING,
+            u32::from(value),
+            std::ptr::null_mut(),
+            0,
+        );
+    }
 }

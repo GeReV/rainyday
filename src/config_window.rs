@@ -10,6 +10,8 @@ use nwg::stretch::{
 use nwg::NativeUi;
 use std::cell::RefCell;
 use std::env;
+use std::path::{Path, PathBuf};
+use winapi::um::winuser::{SM_CXSCREEN, SM_CYSCREEN};
 
 #[derive(Default, NwgUi)]
 pub struct ConfigWindow {
@@ -68,7 +70,7 @@ impl ConfigWindow {
                 self.file_name.set_text(&directory);
                 self.read_file();
 
-                if let Err(err) = self.save(&self.file_name.text()) {
+                if let Err(err) = self.save(PathBuf::from(self.file_name.text()).as_path()) {
                     println!("Could not save path in registry: {:?}", err);
                 };
             }
@@ -125,13 +127,38 @@ impl ConfigWindow {
         }
     }
 
-    fn save(&self, path: &str) -> std::io::Result<()> {
-        Config::default().set_background(path)
+    fn save(&self, path: &Path) -> std::io::Result<()> {
+        use winapi::um::winuser::GetSystemMetrics;
+
+        let mut config = Config::default();
+
+        // Remove previous cache.
+        if let Some(previous_background) = config.cached_background() {
+            if let Err(e) = std::fs::remove_file(&previous_background) {
+                eprintln!(
+                    "Failed to delete file {}: {}",
+                    previous_background.to_string_lossy(),
+                    e.to_string()
+                )
+            }
+        }
+
+        config.set_background(path);
+
+        let image = image::open(path).unwrap();
+
+        let width = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+        let height = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+
+        let resized_image =
+            image.resize_to_fill(width as u32, height as u32, image::FilterType::Gaussian);
+
+        resized_image.save(config.cached_background().unwrap().as_path())
     }
 
     fn open(&self) {
         if let Some(path) = Config::default().background() {
-            self.file_name.set_text(&path);
+            self.file_name.set_text(path.to_str().unwrap());
             self.read_file();
         }
     }

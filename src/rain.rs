@@ -127,55 +127,18 @@ impl Rain {
         .into_inner();
 
         let background_texture = {
-            let path = match config.background() {
-                Some(path) => path,
-                None => {
-                    let current_exe = std::env::current_exe().unwrap();
-                    let mut dir = current_exe.parent().unwrap();
+            let fallback_background = config.backgrounds_directory().join("background.jpg");
 
-                    dir.join("assets\\textures\\background.jpg")
-                        .to_str()
-                        .unwrap()
-                        .to_string()
-                }
-            };
+            let path = config
+                .cached_background()
+                .unwrap_or(fallback_background.clone());
 
-            let mut options = TextureLoadOptions::from_res_rgb(&path);
+            let mut options = TextureLoadOptions::from_res_rgb(path.to_str().unwrap());
             options.gen_mipmaps = true;
 
-            let mut image = image::open(&path).unwrap();
-
-            let texture_dimensions = image.dimensions();
-            let (screen_width, screen_height) = window_size;
-
-            let screen_ratio = screen_width as f32 / screen_height as f32;
-            let texture_ratio = texture_dimensions.0 as f32 / texture_dimensions.1 as f32;
-
-            let target_dimensions = if screen_ratio < texture_ratio {
-                let ratio = screen_ratio / texture_ratio;
-                (
-                    texture_dimensions.0 as f32 * ratio,
-                    texture_dimensions.1 as f32,
-                )
-            } else {
-                let ratio = texture_ratio / screen_ratio;
-                (
-                    texture_dimensions.0 as f32,
-                    texture_dimensions.1 as f32 * ratio,
-                )
-            };
-
-            let offsets = (
-                (texture_dimensions.0 as f32 - target_dimensions.0) * 0.5,
-                (texture_dimensions.1 as f32 - target_dimensions.1) * 0.5,
-            );
-
-            let x = offsets.0;
-            let y = offsets.1;
-            let width = texture_dimensions.0 as f32 - offsets.0;
-            let height = texture_dimensions.1 as f32 - offsets.1;
-
-            let image = image.crop(x as u32, y as u32, (width - x) as u32, (height - y) as u32);
+            let mut image = image::open(&path)
+                .or_else(|_| image::open(&fallback_background))
+                .unwrap();
 
             Texture::from_image(options, &gl, &image).unwrap()
         };

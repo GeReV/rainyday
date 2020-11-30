@@ -12,7 +12,7 @@ const BACKGROUND_PASS_GREEN_FRAG: &str =
     include_str!("../assets/shaders/background_pass_green.frag");
 const BACKGROUND_PASS_BLUE_FRAG: &str = include_str!("../assets/shaders/background_pass_blue.frag");
 
-const KERNEL0BRACKETS_REAL_XY_IM_ZW: [f32; 2] = [0.411259, -0.548794];
+const _KERNEL0BRACKETS_REAL_XY_IM_ZW: [f32; 2] = [0.411259, -0.548794];
 const KERNEL0_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
     [
         /*XY: Non Bracketed*/ 0.014096, -0.022658, /*Bracketed WZ:*/ 0.055991, 0.004413,
@@ -66,7 +66,7 @@ const KERNEL0_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
         /*XY: Non Bracketed*/ 0.014096, -0.022658, /*Bracketed WZ:*/ 0.055991, 0.004413,
     ],
 ];
-const KERNEL1WEIGHTS_REAL_X_IM_Y: [f32; 2] = [0.513282, 4.561110];
+const _KERNEL1WEIGHTS_REAL_X_IM_Y: [f32; 2] = [0.513282, 4.561110];
 const KERNEL1_REAL_X_IM_Y_REAL_Z_IM_W: [[f32; 4]; 17] = [
     [
         /*XY: Non Bracketed*/ 0.000115, 0.009116, /*Bracketed WZ:*/ 0.000000, 0.051147,

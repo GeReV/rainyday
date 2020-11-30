@@ -2,12 +2,10 @@
 use crate::config::Config;
 use crate::droplets::Droplets;
 use crate::quad::Quad;
-use crate::render_gl;
 use crate::render_gl::buffer::ArrayBuffer;
 use crate::render_gl::{
     ColorBuffer, Error, FrameBuffer, Program, Shader, Texture, TextureLoadOptions, Viewport,
 };
-use image::GenericImageView;
 use nalgebra as na;
 use nalgebra::{Matrix4, Orthographic3, Point3, Translation3, Vector2, Vector3, Vector4};
 use ncollide2d::na::Isometry2;
@@ -54,7 +52,6 @@ fn load_shader(gl: &gl::Gl, vert_source: &str, frag_source: &str, debug_name: &s
 pub struct Rain {
     gl: gl::Gl,
 
-    max_droplet_count: usize,
     droplet_size_range: (f32, f32),
 
     updates: Vec<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>,
@@ -100,14 +97,14 @@ impl Rain {
         window_size: (u32, u32),
         config: &Config,
     ) -> Result<Self, failure::Error> {
-        let mut droplets: Droplets = Droplets::with_capacity(max_droplet_count);
+        let droplets: Droplets = Droplets::with_capacity(max_droplet_count);
 
         let world = CollisionWorld::new(2.0);
 
         let collision_group = CollisionGroups::new();
         let contacts_query = GeometricQueryType::Proximity(0.0);
 
-        let mut viewport = Viewport::for_window(window_size.0 as i32, window_size.1 as i32);
+        let viewport = Viewport::for_window(window_size.0 as i32, window_size.1 as i32);
 
         viewport.set_used(&gl);
 
@@ -116,7 +113,7 @@ impl Rain {
         .inverse()
         .to_homogeneous();
 
-        let mut projection_matrix: Matrix4<f32> = Orthographic3::new(
+        let projection_matrix: Matrix4<f32> = Orthographic3::new(
             0.0,
             window_size.0 as f32,
             0.0,
@@ -136,7 +133,7 @@ impl Rain {
             let mut options = TextureLoadOptions::from_res_rgb(path.to_str().unwrap());
             options.gen_mipmaps = true;
 
-            let mut image = image::open(&path)
+            let image = image::open(&path)
                 .or_else(|_| image::open(&fallback_background))
                 .unwrap();
 
@@ -183,7 +180,6 @@ impl Rain {
         Ok(Rain {
             gl: gl.clone(),
 
-            max_droplet_count,
             droplet_size_range,
 
             updates: Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new(),

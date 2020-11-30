@@ -130,7 +130,7 @@ impl ConfigWindow {
     fn save(&self, path: &Path) -> std::io::Result<()> {
         use winapi::um::winuser::GetSystemMetrics;
 
-        let mut config = Config::default();
+        let config = Config::default();
 
         // Remove previous cache.
         if let Some(previous_background) = config.cached_background() {
@@ -143,7 +143,7 @@ impl ConfigWindow {
             }
         }
 
-        config.set_background(path);
+        let _ = config.set_background(path);
 
         let image = image::open(path).unwrap();
 

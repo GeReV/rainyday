@@ -28,28 +28,14 @@ use crate::config_window::ConfigWindow;
 use crate::debug::failure_to_string;
 #[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
-use crate::droplets::Droplets;
-use crate::quad::Quad;
 
-use failure::err_msg;
-use nalgebra as na;
-use nalgebra::{Isometry2, Vector2};
-use ncollide2d::pipeline::{
-    CollisionGroups, CollisionObjectSlabHandle, CollisionWorld, GeometricQueryType,
-};
-use ncollide2d::query::Proximity;
-use ncollide2d::shape::{Ball, ShapeHandle};
-
-use crate::render_gl::ColorBuffer;
 use glutin::dpi::{PhysicalSize, Size};
-use glutin::event_loop::EventLoop;
-use glutin::window::Fullscreen;
-use glutin::{Context, ContextWrapper, GlRequest, PossiblyCurrent};
-use render_gl::buffer::*;
-use resources::Resources;
+use glutin::event::{Event, WindowEvent};
+use glutin::event_loop::{ControlFlow, EventLoop};
+use glutin::platform::windows::WindowBuilderExtWindows;
+use glutin::window::{Fullscreen, WindowBuilder};
+use glutin::{ContextBuilder, GlRequest};
 use std::env;
-use std::path::Path;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use winapi::shared::windef::HWND;
@@ -81,7 +67,7 @@ fn main() {
             }
         }
         "/c" => {
-            let (_, hwnd) = arg.split_at(3);
+            let (_, _hwnd) = arg.split_at(3);
 
             // Configuration
             ConfigWindow::init();
@@ -99,12 +85,6 @@ fn run(
     max_droplet_count: usize,
     droplet_size_range: (f32, f32),
 ) -> Result<(), failure::Error> {
-    use glutin::event::{Event, WindowEvent};
-    use glutin::event_loop::{ControlFlow, EventLoop};
-    use glutin::platform::windows::{RawContextExt, WindowBuilderExtWindows, WindowExtWindows};
-    use glutin::window::WindowBuilder;
-    use glutin::ContextBuilder;
-
     let event_loop = EventLoop::new();
 
     let mut wb = WindowBuilder::new().with_title("Rain");
@@ -138,7 +118,7 @@ fn run(
         use glutin::platform::windows::{RawContextExt, WindowExtWindows};
 
         let hwnd = window.hwnd();
-        let mut cb = ContextBuilder::new().with_gl(GlRequest::Latest);
+        let cb = ContextBuilder::new().with_gl(GlRequest::Latest);
 
         cb.build_raw_context(hwnd).unwrap()
     };

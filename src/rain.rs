@@ -55,6 +55,7 @@ pub struct Rain {
     gl: gl::Gl,
 
     max_droplet_count: usize,
+    droplet_size_range: (f32, f32),
 
     updates: Vec<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>,
 
@@ -95,6 +96,7 @@ impl Rain {
     pub fn new(
         gl: &gl::Gl,
         max_droplet_count: usize,
+        droplet_size_range: (f32, f32),
         window_size: (u32, u32),
         config: &Config,
     ) -> Result<Self, failure::Error> {
@@ -219,6 +221,7 @@ impl Rain {
             gl: gl.clone(),
 
             max_droplet_count,
+            droplet_size_range,
 
             updates: Vec::<(CollisionObjectSlabHandle, CollisionObjectSlabHandle)>::new(),
 
@@ -254,8 +257,6 @@ impl Rain {
             frame_buffer,
         })
     }
-
-    pub fn update_resolution() {}
 
     pub fn update(&mut self, delta: &Duration) {
         let mut rng = rand::thread_rng();
@@ -296,7 +297,7 @@ impl Rain {
                         rng.gen_range(0.0, self.viewport.w as f32),
                         rng.gen_range(0.0, self.viewport.h as f32),
                     );
-                    d.size = rng.gen_range(3.0, 8.0);
+                    d.size = rng.gen_range(self.droplet_size_range.0, self.droplet_size_range.1);
 
                     let shape_handle = ShapeHandle::new(Ball::new(d.size * 0.5));
 

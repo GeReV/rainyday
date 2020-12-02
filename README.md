@@ -9,3 +9,10 @@ Background photo by [Antoine Meillet](https://unsplash.com/@antoinem?utm_source=
 ### Video
 
 [![](.github/screenshot.jpg)](https://youtu.be/wSUVHGUSMoo)
+
+## Install
+
+1. Download **rainyday.zip** from the [latest release](https://github.com/GeReV/rainyday/releases/latest).
+1. Extract **rainyday.zip** into a directory of your choosing, e.g. `C:\rainyday`.
+1. In that directory, right click **rainyday.scr** and click "Install" in the popup menu.
+1. (Optional) In the _Screen Saver Settings_ window which has now popped up, click _Settings_ and choose your own background.

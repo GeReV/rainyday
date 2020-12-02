@@ -118,7 +118,7 @@ fn run(
         }
         Mode::Normal => wb
             .with_visible(false)
-            .with_fullscreen(Some(Fullscreen::Borderless(None))),
+            .with_fullscreen(Some(Fullscreen::Borderless(event_loop.primary_monitor()))),
     };
 
     let window = wb.build(&event_loop).unwrap();
@@ -145,8 +145,8 @@ fn run(
 
     let window_size = window.inner_size();
 
-    // #[cfg(feature = "debug")]
-    // let mut debug_ui = DebugUi::new(&window);
+    #[cfg(feature = "debug")]
+    let mut debug_ui = DebugUi::new(&window, &raw_context);
 
     unsafe {
         gl.Enable(gl::BLEND);
@@ -172,20 +172,17 @@ fn run(
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
 
-        // #[cfg(feature = "debug")]
-        //     {
-        //         debug_ui.handle_event(&event);
-        //
-        //         if debug_ui.ignore_event(&event) {
-        //             continue;
-        //         }
-        //     }
+        #[cfg(feature = "debug")]
+        debug_ui.handle_event(&window, &event);
 
         match event {
             Event::NewEvents(_) => {
                 let now = Instant::now();
 
                 delta = now.duration_since(instant);
+
+                #[cfg(feature = "debug")]
+                debug_ui.update(&delta);
 
                 instant = now;
             }
@@ -231,22 +228,18 @@ fn run(
             Event::RedrawRequested(_) => {
                 rain.render(&delta);
 
-                // #[cfg(feature = "debug")]
-                // debug_ui.render(
-                //     &window,
-                //     &event_pump.mouse_state(),
-                //     &delta,
-                //     droplets.used_count(),
-                //     droplets_accumulator,
-                // );
+                #[cfg(feature = "debug")]
+                debug_ui.render(
+                    &window,
+                    rain.droplets.used_count(),
+                    rain.droplets_accumulator,
+                );
 
                 context.as_ref().unwrap().swap_buffers().unwrap();
             }
             _ => (),
         }
     });
-
-    Ok(())
 }
 
 fn set_screensaver_running(value: bool) {

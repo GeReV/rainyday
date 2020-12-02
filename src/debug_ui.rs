@@ -1,13 +1,14 @@
-﻿use imgui::Ui;
-use sdl2::event::Event;
-use sdl2::mouse::MouseState;
-use sdl2::video::Window;
+﻿use glutin::event::Event;
+use glutin::window::Window;
+use glutin::{ContextWrapper, PossiblyCurrent};
+use imgui::Ui;
+use imgui_winit_support::HiDpiMode;
 use std::collections::VecDeque;
 use std::time::Duration;
 
 pub struct DebugUi {
     imgui_context: imgui::Context,
-    imgui_sdl2: imgui_sdl2::ImguiSdl2,
+    platform: imgui_winit_support::WinitPlatform,
     renderer: imgui_opengl_renderer::Renderer,
 
     opened: bool,
@@ -15,46 +16,45 @@ pub struct DebugUi {
 }
 
 impl DebugUi {
-    pub fn new(window: &Window) -> Self {
+    pub fn new(window: &Window, context: &ContextWrapper<PossiblyCurrent, ()>) -> Self {
         let mut imgui_context = imgui::Context::create();
         imgui_context.set_ini_filename(None);
 
-        let imgui_sdl2 = imgui_sdl2::ImguiSdl2::new(&mut imgui_context, &window);
+        let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui_context);
+
+        platform.attach_window(imgui_context.io_mut(), window, HiDpiMode::Rounded);
 
         let renderer = imgui_opengl_renderer::Renderer::new(&mut imgui_context, |s| {
-            window.subsystem().gl_get_proc_address(s) as _
+            context.get_proc_address(s) as _
         });
 
         DebugUi {
             imgui_context,
-            imgui_sdl2,
+            platform,
             renderer,
             opened: true,
             frames: VecDeque::with_capacity(100),
         }
     }
 
-    pub fn handle_event(&mut self, event: &Event) {
-        self.imgui_sdl2
-            .handle_event(&mut self.imgui_context, &event);
+    pub fn handle_event<T>(&mut self, window: &Window, event: &Event<T>) {
+        self.platform
+            .handle_event(self.imgui_context.io_mut(), window, event);
     }
 
-    pub fn ignore_event(&self, event: &Event) -> bool {
-        self.imgui_sdl2.ignore_event(&event)
+    pub fn update(&mut self, delta: &Duration) {
+        self.imgui_context.io_mut().delta_time = delta.as_secs_f32();
     }
 
     pub fn render(
         &mut self,
         window: &Window,
-        mouse_state: &MouseState,
-        delta: &Duration,
         droplets_used_count: usize,
         droplets_accumulator: usize,
     ) {
-        self.imgui_sdl2
-            .prepare_frame(self.imgui_context.io_mut(), &window, mouse_state);
-
-        self.imgui_context.io_mut().delta_time = delta.as_secs_f32();
+        self.platform
+            .prepare_frame(self.imgui_context.io_mut(), window)
+            .unwrap();
 
         if self.frames.len() == 100 {
             self.frames.pop_front();
@@ -71,7 +71,7 @@ impl DebugUi {
             droplets_accumulator,
         );
 
-        self.imgui_sdl2.prepare_render(&ui, &window);
+        self.platform.prepare_render(&ui, window);
 
         self.renderer.render(ui);
     }

@@ -67,9 +67,9 @@ pub struct Rain {
     projection_matrix: Matrix4<f32>,
 
     time_accumulator: f64,
-    droplets_accumulator: usize,
+    pub(crate) droplets_accumulator: usize,
 
-    droplets: Droplets,
+    pub(crate) droplets: Droplets,
 
     black_color_buffer: ColorBuffer,
 

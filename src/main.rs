@@ -20,7 +20,6 @@ mod droplets;
 mod quad;
 mod rain;
 pub mod render_gl;
-pub mod resources;
 mod vertex;
 
 use crate::config::Config;
@@ -201,7 +200,6 @@ fn run(
             }
             Event::LoopDestroyed => {
                 context.take(); // Make sure it drops first
-                return;
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CursorMoved { position, .. } => match initial_mouse_position {

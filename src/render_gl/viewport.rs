@@ -1,6 +1,4 @@
-﻿use gl;
-
-pub struct Viewport {
+﻿pub struct Viewport {
     pub x: i32,
     pub y: i32,
     pub w: i32,

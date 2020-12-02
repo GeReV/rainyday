@@ -128,9 +128,9 @@ impl Rain {
 
             let path = config
                 .cached_background()
-                .unwrap_or(fallback_background.clone());
+                .unwrap_or_else(|| fallback_background.clone());
 
-            let mut options = TextureLoadOptions::from_res_rgb(path.to_str().unwrap());
+            let mut options = TextureLoadOptions::rgb();
             options.gen_mipmaps = true;
 
             let image = image::open(&path)
@@ -484,7 +484,7 @@ impl Rain {
                 gl::FLOAT, // data type
                 gl::FALSE,
                 std::mem::size_of::<na::Vector3<f32>>() as gl::types::GLint,
-                0 as *const gl::types::GLvoid,
+                std::ptr::null(),
             );
         }
         instance_vbo.unbind();
@@ -533,7 +533,7 @@ impl Rain {
                 if droplet.seed <= 0 {
                     droplet.seed =
                         (droplet.size * 0.5 * rng.gen_range(0.0, 1.0) * fps).floor() as i32;
-                    droplet.skipping = droplet.skipping == false;
+                    droplet.skipping = !droplet.skipping;
                     droplet.slowing = true;
                 }
 

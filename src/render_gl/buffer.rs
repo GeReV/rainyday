@@ -1,6 +1,4 @@
-﻿use gl;
-
-pub trait BufferType {
+﻿pub trait BufferType {
     const BUFFER_TYPE: gl::types::GLuint;
 }
 
@@ -96,14 +94,15 @@ where
             (size * ::std::mem::size_of::<T>()) as gl::types::GLsizeiptr,   //  length
             gl::MAP_WRITE_BIT | gl::MAP_INVALIDATE_RANGE_BIT,               // usage
         );
-        if ptr == ::std::ptr::null_mut() {
+        if ptr.is_null() {
             return None;
         }
-        return Some(MappedBuffer {
+
+        Some(MappedBuffer {
             gl: self.gl.clone(),
             data: ::std::slice::from_raw_parts_mut(ptr as *mut T, size),
             _marker: ::std::marker::PhantomData,
-        });
+        })
     }
 }
 
@@ -113,7 +112,7 @@ where
 {
     fn drop(&mut self) {
         unsafe {
-            self.gl.DeleteBuffers(1, &mut self.vbo);
+            self.gl.DeleteBuffers(1, &self.vbo);
         }
     }
 }
@@ -195,7 +194,7 @@ impl VertexArray {
 impl Drop for VertexArray {
     fn drop(&mut self) {
         unsafe {
-            self.gl.DeleteVertexArrays(1, &mut self.vao);
+            self.gl.DeleteVertexArrays(1, &self.vao);
         }
     }
 }

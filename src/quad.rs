@@ -1,6 +1,5 @@
 ﻿use crate::render_gl::buffer;
 use crate::vertex::Vertex;
-use gl;
 
 pub struct Quad {
     _vbo: buffer::ArrayBuffer,

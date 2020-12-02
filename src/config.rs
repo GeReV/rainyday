@@ -23,7 +23,7 @@ impl Config {
         match ini {
             Ok(ini) => ini
                 .get_from(None::<&str>, BACKGROUND_KEY)
-                .map(|s| PathBuf::from(s)),
+                .map(PathBuf::from),
             Err(_) => None,
         }
     }

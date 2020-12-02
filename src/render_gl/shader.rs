@@ -1,19 +1,9 @@
-﻿use gl;
-use nalgebra as na;
-use std;
+﻿use nalgebra as na;
 use std::ffi::{CStr, CString};
 use std::iter::Iterator;
 
 #[derive(Debug, Fail)] // derive Fail, in addition to Debug
 pub enum Error {
-    #[fail(display = "Failed to load resource {}", name)]
-    ResourceLoad {
-        name: String,
-        #[cause]
-        inner: resources::Error,
-    },
-    #[fail(display = "Can not determine shader type for resource {}", name)]
-    CanNotDetermineShaderTypeForResource { name: String },
     #[fail(display = "Failed to compile shader {}: {}", name, message)]
     CompileError { name: String, message: String },
     #[fail(display = "Failed to link program {}: {}", name, message)]
@@ -73,20 +63,6 @@ impl Program {
         Ok(Program {
             gl: gl.clone(),
             id: program_id,
-        })
-    }
-
-    pub fn from_res(gl: &gl::Gl, res: &Resources, name: &str) -> Result<Program, Error> {
-        const POSSIBLE_EXT: [&str; 2] = [".vert", ".frag"];
-
-        let shaders = POSSIBLE_EXT
-            .iter()
-            .map(|file_extension| Shader::from_res(gl, res, &format!("{}{}", name, file_extension)))
-            .collect::<Result<Vec<Shader>, Error>>()?;
-
-        Program::from_shaders(gl, &shaders[..]).map_err(|msg| Error::LinkError {
-            message: msg,
-            name: name.into(),
         })
     }
 
@@ -178,9 +154,6 @@ pub struct Shader {
     gl: gl::Gl,
 }
 
-use crate::resources;
-use crate::resources::Resources;
-
 impl Shader {
     pub fn from_source(
         gl: &gl::Gl,
@@ -212,27 +185,6 @@ impl Shader {
 
     pub fn from_frag_source(gl: &gl::Gl, source: &CStr) -> Result<Shader, String> {
         Shader::from_source(gl, source, gl::FRAGMENT_SHADER)
-    }
-
-    pub fn from_res(gl: &gl::Gl, res: &Resources, name: &str) -> Result<Shader, Error> {
-        const POSSIBLE_EXT: [(&str, gl::types::GLenum); 2] =
-            [(".vert", gl::VERTEX_SHADER), (".frag", gl::FRAGMENT_SHADER)];
-
-        let shader_kind = POSSIBLE_EXT
-            .iter()
-            .find(|&&(file_extension, _)| name.ends_with(file_extension))
-            .map(|&(_, kind)| kind)
-            .ok_or_else(|| Error::CanNotDetermineShaderTypeForResource { name: name.into() })?;
-
-        let source = res.load_cstring(name).map_err(|e| Error::ResourceLoad {
-            name: name.into(),
-            inner: e,
-        })?;
-
-        Shader::from_source(gl, &source, shader_kind).map_err(|msg| Error::CompileError {
-            message: msg,
-            name: name.into(),
-        })
     }
 
     pub fn id(&self) -> gl::types::GLuint {

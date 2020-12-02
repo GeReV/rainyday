@@ -1,5 +1,4 @@
-﻿use gl;
-use nalgebra as na;
+﻿use nalgebra as na;
 
 pub struct ColorBuffer {
     pub color: na::Vector4<f32>,

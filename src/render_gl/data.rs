@@ -1,7 +1,5 @@
 ﻿#![allow(non_camel_case_types)]
 
-use gl;
-
 #[derive(Copy, Clone, Debug)]
 #[repr(C, packed)]
 pub struct i8_ {

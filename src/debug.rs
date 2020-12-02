@@ -16,7 +16,7 @@
         let _ = write!(&mut result, "{}", cause);
         if let Some(backtrace) = cause.backtrace() {
             let backtrace_str = format!("{}", backtrace);
-            if backtrace_str.len() > 0 {
+            if !backtrace_str.is_empty() {
                 let _ = writeln!(&mut result, " This happened at {}", backtrace);
             } else {
                 let _ = writeln!(&mut result);

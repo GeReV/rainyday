@@ -1,7 +1,5 @@
 ﻿use crate::quad;
 use crate::render_gl::{Error, FrameBuffer, Program, Shader, Texture};
-use failure;
-use gl;
 use nalgebra as na;
 use std::rc::Rc;
 

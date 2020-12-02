@@ -28,3 +28,9 @@ impl Droplet {
         }
     }
 }
+
+impl Default for Droplet {
+    fn default() -> Self {
+        Self::new()
+    }
+}

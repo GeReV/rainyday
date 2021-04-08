@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+//#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 extern crate gl;
 #[macro_use]
@@ -11,7 +11,7 @@ extern crate rand;
 
 mod background;
 mod config;
-mod config_window;
+// mod config_window;
 mod debug;
 #[cfg(feature = "debug")]
 mod debug_ui;
@@ -23,7 +23,7 @@ pub mod render_gl;
 mod vertex;
 
 use crate::config::Config;
-use crate::config_window::ConfigWindow;
+// use crate::config_window::ConfigWindow;
 use crate::debug::failure_to_string;
 #[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
@@ -31,19 +31,22 @@ use crate::debug_ui::DebugUi;
 use glutin::dpi::{PhysicalPosition, PhysicalSize, Size};
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
-use glutin::platform::windows::WindowBuilderExtWindows;
+// use glutin::platform::windows::WindowBuilderExtWindows;
+use glutin::platform::macos::WindowBuilderExtMacOS;
+
 use glutin::window::{Fullscreen, WindowBuilder};
 use glutin::{ContextBuilder, GlRequest};
 use std::env;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
-use winapi::shared::windef::HWND;
-use winapi::um::winuser::SPI_SCREENSAVERRUNNING;
+use glutin::Api::OpenGl;
+// use winapi::shared::windef::HWND;
+// use winapi::um::winuser::SPI_SCREENSAVERRUNNING;
 
 const MAX_DROPLET_COUNT: usize = 10_000;
 
 enum Mode {
-    Preview(HWND),
+    // Preview(HWND),
     Normal,
 }
 
@@ -56,27 +59,27 @@ fn main() {
         .to_ascii_lowercase();
 
     match &arg[..2] {
-        "/p" => {
-            // Preview, parse hwnd from second argument
-            let hwnd = {
-                let str_hwnd = args.get(1).unwrap();
-
-                usize::from_str(str_hwnd).unwrap()
-            };
-
-            let parent_hwnd = unsafe { std::mem::transmute(hwnd) };
-
-            if let Err(e) = run(Mode::Preview(parent_hwnd), 500, (1.0, 5.0)) {
-                let err = failure_to_string(e);
-                println!("{}", err);
-            }
-        }
-        "/c" => {
-            let (_, _hwnd) = arg.split_at(3);
-
-            // Configuration
-            ConfigWindow::init();
-        }
+        // "/p" => {
+        //     // Preview, parse hwnd from second argument
+        //     let hwnd = {
+        //         let str_hwnd = args.get(1).unwrap();
+        //
+        //         usize::from_str(str_hwnd).unwrap()
+        //     };
+        //
+        //     let parent_hwnd = unsafe { std::mem::transmute(hwnd) };
+        //
+        //     if let Err(e) = run(Mode::Preview(parent_hwnd), 500, (1.0, 5.0)) {
+        //         let err = failure_to_string(e);
+        //         println!("{}", err);
+        //     }
+        // }
+        // "/c" => {
+        //     let (_, _hwnd) = arg.split_at(3);
+        //
+        //     // Configuration
+        //     ConfigWindow::init();
+        // }
         "/s" | _ => {
             if let Err(e) = run(Mode::Normal, MAX_DROPLET_COUNT, (3.0, 8.0)) {
                 println!("{}", failure_to_string(e));
@@ -97,63 +100,63 @@ fn run(
     let mut wb = WindowBuilder::new().with_title("Rain");
 
     wb = match mode {
-        Mode::Preview(hwnd) => {
-            let mut rect = winapi::shared::windef::RECT {
-                left: 0,
-                top: 0,
-                right: 0,
-                bottom: 0,
-            };
-
-            unsafe {
-                winapi::um::winuser::GetClientRect(hwnd, &mut rect);
-            }
-
-            wb.with_parent_window(hwnd)
-                .with_decorations(false)
-                .with_inner_size(Size::Physical(PhysicalSize::new(
-                    rect.right as u32,
-                    rect.bottom as u32,
-                )))
-        }
+        // Mode::Preview(hwnd) => {
+        //     let mut rect = winapi::shared::windef::RECT {
+        //         left: 0,
+        //         top: 0,
+        //         right: 0,
+        //         bottom: 0,
+        //     };
+        //
+        //     unsafe {
+        //         winapi::um::winuser::GetClientRect(hwnd, &mut rect);
+        //     }
+        //
+        //     wb.with_parent_window(hwnd)
+        //         .with_decorations(false)
+        //         .with_inner_size(Size::Physical(PhysicalSize::new(
+        //             rect.right as u32,
+        //             rect.bottom as u32,
+        //         )))
+        // }
         Mode::Normal => wb
             .with_visible(false)
             .with_fullscreen(Some(Fullscreen::Borderless(event_loop.primary_monitor()))),
     };
 
-    let window = wb.build(&event_loop).unwrap();
-
     let raw_context = unsafe {
-        use glutin::platform::windows::{RawContextExt, WindowExtWindows};
+        // use glutin::platform::windows::{RawContextExt, WindowExtWindows};
+        use glutin::platform::macos::{WindowExtMacOS};
 
-        let hwnd = window.hwnd();
-        let cb = ContextBuilder::new().with_gl(GlRequest::Latest);
+        // let hwnd = window.hwnd();
+        let cb = ContextBuilder::new().with_gl(GlRequest::Specific(OpenGl, (4, 1)));
 
-        cb.build_raw_context(hwnd).unwrap()
+        cb.build_windowed(wb, &event_loop).unwrap()
     };
 
     let raw_context = unsafe { raw_context.make_current().unwrap() };
 
     let gl = gl::Gl::load_with(|s| raw_context.get_proc_address(s) as *const _);
 
-    if let Mode::Normal = mode {
-        window.set_visible(true);
-        window.set_cursor_visible(false);
+    // if let Mode::Normal = mode {
+    //     window.set_visible(true);
+    //     window.set_cursor_visible(false);
+    //
+    //     // set_screensaver_running(true);
+    // }
 
-        set_screensaver_running(true);
-    }
+    // let window_size = window.inner_size();
+    let window_size = raw_context.window().inner_size();
 
-    let window_size = window.inner_size();
-
-    #[cfg(feature = "debug")]
-    let mut debug_ui = DebugUi::new(&window, &raw_context);
+    // #[cfg(feature = "debug")]
+    // let mut debug_ui = DebugUi::new(&window, &raw_context);
 
     unsafe {
         gl.Enable(gl::BLEND);
         gl.BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
     }
 
-    let mut context = Option::from(raw_context);
+    // let mut context = Option::from(raw_context);
 
     let mut rain = rain::Rain::new(
         &gl,
@@ -193,10 +196,10 @@ fn run(
 
                 rain.update(&delta);
 
-                window.request_redraw();
+                raw_context.window().request_redraw();
             }
             Event::LoopDestroyed => {
-                context.take(); // Make sure it drops first
+                // raw_context.take(); // Make sure it drops first
             }
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CursorMoved { position, .. } => match initial_mouse_position {
@@ -219,9 +222,9 @@ fn run(
                 | WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
 
-                    if let Mode::Normal = mode {
-                        set_screensaver_running(false);
-                    }
+                    // if let Mode::Normal = mode {
+                    //     set_screensaver_running(false);
+                    // }
                 }
                 _ => (),
             },
@@ -235,22 +238,20 @@ fn run(
                     rain.droplets_accumulator,
                 );
 
-                context.as_ref().unwrap().swap_buffers().unwrap();
+                raw_context.swap_buffers().unwrap();
             }
             _ => (),
         }
     });
-
-    Ok(())
 }
 
-fn set_screensaver_running(value: bool) {
-    unsafe {
-        winapi::um::winuser::SystemParametersInfoA(
-            SPI_SCREENSAVERRUNNING,
-            u32::from(value),
-            std::ptr::null_mut(),
-            0,
-        );
-    }
-}
+// fn set_screensaver_running(value: bool) {
+//     unsafe {
+//         winapi::um::winuser::SystemParametersInfoA(
+//             SPI_SCREENSAVERRUNNING,
+//             u32::from(value),
+//             std::ptr::null_mut(),
+//             0,
+//         );
+//     }
+// }

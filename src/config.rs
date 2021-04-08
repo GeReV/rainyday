@@ -47,7 +47,7 @@ impl Config {
             .unwrap()
             .parent()
             .unwrap()
-            .join("assets\\textures")
+            .join("assets/textures")
     }
 }
 

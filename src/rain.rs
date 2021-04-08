@@ -134,10 +134,9 @@ impl Rain {
             options.gen_mipmaps = true;
 
             let image = image::open(&path)
-                .or_else(|_| image::open(&fallback_background))
-                .unwrap();
+                .or_else(|_| image::open(&fallback_background));
 
-            Texture::from_image(options, &gl, &image).unwrap()
+            Texture::from_image(options, &gl, &image.unwrap()).unwrap()
         };
 
         let texture_rc = Rc::<Texture>::new(background_texture);

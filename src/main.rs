@@ -147,7 +147,7 @@ fn run(
     let window_size = raw_context.window().inner_size();
 
     #[cfg(feature = "debug")]
-    let mut debug_ui = DebugUi::new(&window, &raw_context);
+    let mut debug_ui = DebugUi::new(raw_context.window(), &raw_context);
 
     unsafe {
         gl.Enable(gl::BLEND);
@@ -174,7 +174,7 @@ fn run(
         *control_flow = ControlFlow::Poll;
 
         #[cfg(feature = "debug")]
-        debug_ui.handle_event(&window, &event);
+        debug_ui.handle_event(raw_context.window(), &event);
 
         match event {
             Event::NewEvents(_) => {
@@ -231,7 +231,7 @@ fn run(
 
                 #[cfg(feature = "debug")]
                 debug_ui.render(
-                    &window,
+                    raw_context.window(),
                     rain.droplets.used_count(),
                     rain.droplets_accumulator,
                 );

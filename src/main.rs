@@ -28,11 +28,10 @@ use crate::debug::failure_to_string;
 #[cfg(feature = "debug")]
 use crate::debug_ui::DebugUi;
 
-use glutin::dpi::{PhysicalPosition, PhysicalSize, Size};
+use glutin::dpi::PhysicalPosition;
 use glutin::event::{Event, WindowEvent};
 use glutin::event_loop::{ControlFlow, EventLoop};
 // use glutin::platform::windows::WindowBuilderExtWindows;
-use glutin::platform::macos::WindowBuilderExtMacOS;
 
 use glutin::window::{Fullscreen, WindowBuilder};
 use glutin::{ContextBuilder, GlRequest};
@@ -124,9 +123,8 @@ fn run(
             .with_fullscreen(Some(Fullscreen::Borderless(event_loop.primary_monitor()))),
     };
 
-    let raw_context = unsafe {
+    let raw_context = {
         // use glutin::platform::windows::{RawContextExt, WindowExtWindows};
-        use glutin::platform::macos::{WindowExtMacOS};
 
         // let hwnd = window.hwnd();
         let cb = ContextBuilder::new().with_gl(GlRequest::Specific(OpenGl, (4, 1)));
@@ -148,8 +146,8 @@ fn run(
     // let window_size = window.inner_size();
     let window_size = raw_context.window().inner_size();
 
-    // #[cfg(feature = "debug")]
-    // let mut debug_ui = DebugUi::new(&window, &raw_context);
+    #[cfg(feature = "debug")]
+    let mut debug_ui = DebugUi::new(&window, &raw_context);
 
     unsafe {
         gl.Enable(gl::BLEND);

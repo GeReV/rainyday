@@ -16,7 +16,7 @@ pub struct DebugUi {
 }
 
 impl DebugUi {
-    pub fn new(window: &Window, context: &ContextWrapper<PossiblyCurrent, ()>) -> Self {
+    pub fn new<W>(window: &Window, context: &ContextWrapper<PossiblyCurrent, W>) -> Self {
         let mut imgui_context = imgui::Context::create();
         imgui_context.set_ini_filename(None);
 

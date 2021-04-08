@@ -240,6 +240,8 @@ fn run(
             _ => (),
         }
     });
+
+    Ok(())
 }
 
 fn set_screensaver_running(value: bool) {

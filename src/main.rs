@@ -127,7 +127,7 @@ fn run(
         // use glutin::platform::windows::{RawContextExt, WindowExtWindows};
 
         // let hwnd = window.hwnd();
-        let cb = ContextBuilder::new().with_gl(GlRequest::Latest));
+        let cb = ContextBuilder::new().with_gl(GlRequest::Latest);
 
         cb.build_windowed(wb, &event_loop).unwrap()
     };
